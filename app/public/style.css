@@ -11,8 +11,13 @@
   --accent-soft: #eaf0f6;
   --good: #2f7d4f;
   --good-soft: #e7f4ec;
-  --bad: #a1442e;
-  --bad-soft: #fbeae6;
+  /* Fase 12 (docs/09, achado #18) -- feedback de LINGUAGEM (resposta errada,
+     fonema divergente) usa SEMPRE verde/ambar, nunca vermelho -- vermelho
+     fica reservado a falha tecnica (servico indisponivel etc, .error),
+     nunca a "voce errou". Token global em vez de decisao redeclarada
+     engine a engine. */
+  --caution: #92400e;
+  --caution-soft: #fdf1e0;
   --radius: 10px;
 }
 
@@ -226,14 +231,32 @@ button.link {
   font-size: 1rem;
 }
 
+/* Fase 12 (docs/09) -- reconhecimento de exposicao, SEMPRE o primeiro
+   elemento, visualmente distinto (pill, nao bloco) do feedback de idioma
+   que vem depois -- separacao espacial real, nao so' campo de dado
+   diferente. */
+.showed-up-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  background: var(--good-soft);
+  color: var(--good);
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
 .feedback.correct {
   background: var(--good-soft);
   color: var(--good);
 }
 
 .feedback.incorrect {
-  background: var(--bad-soft);
-  color: var(--bad);
+  background: var(--caution-soft);
+  color: var(--caution);
 }
 
 .feedback .answer {
@@ -295,8 +318,8 @@ button.link {
 }
 
 .phone.diff, .phone.miss {
-  background: var(--bad-soft);
-  color: var(--bad);
+  background: var(--caution-soft);
+  color: var(--caution);
 }
 
 .phone.extra {
@@ -464,4 +487,82 @@ button.link {
   align-self: flex-end;
   background: var(--accent);
   color: white;
+}
+
+/* Fase 11 -- HostileRoleplayEngine: escada de exposicao (docs/09
+   ExposureLadder). Paleta deliberadamente calma mesmo aqui -- sem
+   vermelho/alarme pra "intensidade maior", que sinalizaria perigo em vez
+   de so' indicar um degrau mais alto de uma pratica controlada. */
+
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.ladder-item {
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ladder-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ladder-item-label {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.intensity-dots {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.intensity-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.intensity-dot.filled {
+  background: var(--accent);
+}
+
+.ladder-completed {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+/* Fase 11 -- escolha texto/voz, sempre explicita antes de comecar (nunca
+   pre-selecionada em "voz", nunca escondida). */
+
+.mode-toggle {
+  display: flex;
+  gap: 1.2rem;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.mode-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.not-hostile-badge {
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
 }

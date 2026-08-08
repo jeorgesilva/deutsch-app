@@ -11,7 +11,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ env }) => {
   }
 
   try {
-    const { sessionId, openingMessage } = await startSession(env, plan.theme_text);
+    const { sessionId, openingMessage } = await startSession(env, "StructuredSpeechEngine", "moderador", plan.theme_text);
     return Response.json({ session_id: sessionId, message: openingMessage });
   } catch (err) {
     return Response.json({ error: `falha ao iniciar sessao: ${(err as Error).message}` }, { status: 502 });

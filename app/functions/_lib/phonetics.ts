@@ -53,3 +53,17 @@ export function scoreSpokenGapFill(
     audio_base64: audioBase64,
   });
 }
+
+// Fase 11 -- loop de voz do Grupo D (docs/08: grava -> STT local -> LLM ->
+// Piper -> toca). Diferente das duas funcoes acima (que corrigem uma
+// tentativa fixa), estas duas sao STT/TTS avulsos -- transcribeAudio vira
+// a "fala digitada" do usuario pro mecanismo de roleplay ja existente
+// (_lib/roleplay.ts postMessage), synthesizeSpeech sintetiza qualquer
+// texto de resposta em tempo real (nao persiste, e' so' pro turno atual).
+export function transcribeAudio(serviceUrl: string, audioBase64: string): Promise<{ text: string }> {
+  return callService(serviceUrl, "/transcribe", { audio_base64: audioBase64 });
+}
+
+export function synthesizeSpeech(serviceUrl: string, text: string): Promise<{ audio_base64: string }> {
+  return callService(serviceUrl, "/synthesize", { text });
+}

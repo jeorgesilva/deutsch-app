@@ -1,6 +1,9 @@
 // Fase 9 -- frontend minimo, vanilla JS de proposito (nenhum framework
-// pra manter "minimo" literal). Um exercicio por vez, feedback imediato,
-// avanca sozinho apos alguns segundos de leitura do feedback.
+// pra manter "minimo" literal). Um exercicio por vez, feedback imediato.
+// Fase 12 (docs/09, Secao 11 "Gestao de atencao"): avanco e' sempre por
+// clique manual em "Continuar", nunca automatico por timeout -- ritmo
+// iniciado pelo usuario, nao pressao de tempo (mesmo principio ja usado
+// pra rejeitar cronometro regressivo em qualquer exercicio de exposicao).
 
 const main = document.getElementById("main");
 const progressEl = document.getElementById("progress");
@@ -174,6 +177,33 @@ async function renderPlanner() {
 
     plannerEl.appendChild(card);
   });
+
+  // Grupo D (contestação hostil) não usa session_plans -- entrada fixa,
+  // separada dos cartões dinâmicos do Grupo B acima (CLAUDE.md: Grupo D é
+  // grupo à parte do motor semanal).
+  const hostileCard = document.createElement("div");
+  hostileCard.className = "plan-card";
+  hostileCard.innerHTML = `
+    <span class="template-label">Contestação hostil</span>
+    <p class="prompt-hint">Roleplay adversarial — jornalista, tribunal, concorrente, interrogatório técnico. Sem plano necessário.</p>
+    <div class="recorder-actions">
+      <button class="link" data-action="hostile" type="button">Ver cenários →</button>
+    </div>
+  `;
+  hostileCard.querySelector('[data-action="hostile"]').addEventListener("click", renderHostileLadder);
+  plannerEl.appendChild(hostileCard);
+
+  const quickCard = document.createElement("div");
+  quickCard.className = "plan-card";
+  quickCard.innerHTML = `
+    <span class="template-label">Speech rápido</span>
+    <p class="prompt-hint">"Einerseits... andererseits..." -- um tópico, resposta curta e imediata, sem plano necessário.</p>
+    <div class="recorder-actions">
+      <button class="link" data-action="quick" type="button">Novo tópico →</button>
+    </div>
+  `;
+  quickCard.querySelector('[data-action="quick"]').addEventListener("click", renderQuickOpinion);
+  plannerEl.appendChild(quickCard);
 }
 
 // ---------- OpinionEssayEngine (docs/05 item 4) -- LLM com rubrica ----------
@@ -286,6 +316,7 @@ function showEssayFeedback(correction) {
   const strengthsHtml = (correction.strengths ?? []).map((s) => `<li>${escapeHtml(s)}</li>`).join("");
 
   feedbackEl.innerHTML = `
+    ${showedUpBadgeHtml("Você escreveu e enviou — isso já conta.")}
     <div class="essay-structure">${structureHtml}</div>
     ${vocabUsedHtml || vocabMissingHtml ? `<div class="chips">${vocabUsedHtml}${vocabMissingHtml}</div>` : ""}
     ${strengthsHtml ? `<div class="feedback correct"><strong>Pontos fortes</strong><ul>${strengthsHtml}</ul></div>` : ""}
@@ -667,6 +698,7 @@ async function renderStructuredSpeech() {
     <div class="card">
       <span class="template-label">Speech / debate estruturado</span>
       <p class="prompt-hint">${data.topic ? escapeHtml(data.topic) : "Tema livre -- o moderador escolhe."}</p>
+      ${modeToggleHtml("speech")}
       <button class="primary" id="start-speech-btn" type="button">Iniciar conversa</button>
       <button class="link" id="back-to-planner" type="button">← Planejador</button>
       <div id="speech-body"></div>
@@ -676,6 +708,7 @@ async function renderStructuredSpeech() {
 
   document.getElementById("start-speech-btn").addEventListener("click", async () => {
     const startBtn = document.getElementById("start-speech-btn");
+    const mode = getSelectedMode("speech");
     startBtn.disabled = true;
     startBtn.textContent = "Iniciando…";
     const res = await fetch("/api/structured-speech/start", { method: "POST" });
@@ -687,7 +720,15 @@ async function renderStructuredSpeech() {
       return;
     }
     startBtn.style.display = "none";
-    startChatSession(result.session_id, result.message);
+    document.getElementById("speech-mode-toggle").style.display = "none";
+    const start = mode === "voice" ? startVoiceChatSession : startChatSession;
+    start(result.session_id, result.message, {
+      container: document.getElementById("speech-body"),
+      messageUrl: "/api/structured-speech/message",
+      voiceMessageUrl: "/api/roleplay-voice/message",
+      closeUrl: "/api/structured-speech/close",
+      onExit: renderPlanner,
+    });
   });
 }
 
@@ -695,8 +736,34 @@ function chatBubbleHtml(role, text) {
   return `<div class="chat-bubble ${role}">${escapeHtml(text)}</div>`;
 }
 
-function startChatSession(sessionId, openingMessage) {
-  const bodyEl = document.getElementById("speech-body");
+// Escolha texto/voz -- SEMPRE explicita antes de comecar, nunca forcada
+// (docs/05 item 95: "escolha explícita no início"; CLAUDE.md, Grupo D:
+// "voz é upgrade opcional por sessão"). idPrefix evita colisao de name/id
+// quando mais de um seletor existe na mesma tela (ex. varios cartoes da
+// escada).
+function modeToggleHtml(idPrefix) {
+  return `
+    <div class="mode-toggle" id="${idPrefix}-mode-toggle">
+      <label><input type="radio" name="${idPrefix}-mode" value="text" checked /> Texto</label>
+      <label><input type="radio" name="${idPrefix}-mode" value="voice" /> Falar</label>
+    </div>
+  `;
+}
+
+function getSelectedMode(idPrefix) {
+  const checked = document.querySelector(`input[name="${idPrefix}-mode"]:checked`);
+  return checked ? checked.value : "text";
+}
+
+// Mecanismo de chat generico, compartilhado por StructuredSpeechEngine
+// (persona "moderador") e HostileRoleplayEngine (Grupo D, docs/05 itens
+// 95-98). `opts.onExit` fica sempre visivel dentro da propria conversa
+// (nao so' acima da tela) e SAI SEM avaliar -- distinto de "Encerrar e
+// avaliar" (docs/09 achado #13: saida de baixo atrito precisa estar
+// sempre presente, nunca com framing de desistencia, especialmente
+// relevante pras personas hostis de maior carga emocional).
+function startChatSession(sessionId, openingMessage, opts) {
+  const bodyEl = opts.container;
   bodyEl.innerHTML = `
     <div class="chat-log" id="chat-log">${chatBubbleHtml("assistant", openingMessage)}</div>
     <label>Sua resposta (em alemão)
@@ -705,6 +772,7 @@ function startChatSession(sessionId, openingMessage) {
     <div class="recorder-actions">
       <button class="primary" id="chat-send-btn" type="button">Enviar</button>
       <button class="link" id="chat-close-btn" type="button">Encerrar e avaliar</button>
+      <button class="link" id="chat-exit-btn" type="button">← Sair da conversa</button>
     </div>
     <div id="chat-evaluation"></div>
   `;
@@ -713,6 +781,7 @@ function startChatSession(sessionId, openingMessage) {
   const input = document.getElementById("chat-input");
   const sendBtn = document.getElementById("chat-send-btn");
   const closeBtn = document.getElementById("chat-close-btn");
+  const exitBtn = document.getElementById("chat-exit-btn");
   input.focus();
 
   function scrollToBottom() {
@@ -728,7 +797,7 @@ function startChatSession(sessionId, openingMessage) {
     logEl.insertAdjacentHTML("beforeend", chatBubbleHtml("user", text));
     scrollToBottom();
 
-    const res = await fetch("/api/structured-speech/message", {
+    const res = await fetch(opts.messageUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_id: sessionId, text }),
@@ -750,12 +819,14 @@ function startChatSession(sessionId, openingMessage) {
     if (e.key === "Enter") sendMessage();
   });
 
+  exitBtn.addEventListener("click", opts.onExit);
+
   closeBtn.addEventListener("click", async () => {
     input.disabled = true;
     sendBtn.disabled = true;
     closeBtn.disabled = true;
     closeBtn.textContent = "Avaliando…";
-    const res = await fetch("/api/structured-speech/close", {
+    const res = await fetch(opts.closeUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_id: sessionId }),
@@ -766,11 +837,11 @@ function startChatSession(sessionId, openingMessage) {
       document.getElementById("chat-evaluation").innerHTML = `<p class="error">${escapeHtml(result.error)}</p>`;
       return;
     }
-    showSpeechEvaluation(result.evaluation);
+    showRoleplayEvaluation(result.evaluation, opts.onExit);
   });
 }
 
-function showSpeechEvaluation(evaluation) {
+function showRoleplayEvaluation(evaluation, onBack) {
   const el = document.getElementById("chat-evaluation");
   const errorsHtml = (evaluation.erros ?? [])
     .map(
@@ -785,6 +856,7 @@ function showSpeechEvaluation(evaluation) {
   const strengthsHtml = (evaluation.pontos_fortes ?? []).map((s) => `<li>${escapeHtml(s)}</li>`).join("");
 
   el.innerHTML = `
+    ${showedUpBadgeHtml("Você participou da conversa até o fim — isso já conta.")}
     <div class="structure-badge ${evaluation.clareza_estrutural ? "ok" : "missing"}">
       ${evaluation.clareza_estrutural ? "✓" : "○"} Estrutura de debate completa (tese → justificativa → contraponto → conclusão)
     </div>
@@ -793,9 +865,312 @@ function showSpeechEvaluation(evaluation) {
     ${strengthsHtml ? `<div class="feedback correct"><strong>Pontos fortes</strong><ul>${strengthsHtml}</ul></div>` : ""}
     ${errorsHtml ? `<div class="feedback incorrect"><strong>A revisar</strong><ul class="essay-errors">${errorsHtml}</ul></div>` : ""}
     <span class="cefr-estimate">Nível estimado: ${escapeHtml(evaluation.cefr_estimate ?? "—")}</span>
-    <button class="link" id="back-after-speech" type="button">← Planejador</button>
+    <button class="link" id="back-after-speech" type="button">← Voltar</button>
   `;
-  document.getElementById("back-after-speech").addEventListener("click", renderPlanner);
+  document.getElementById("back-after-speech").addEventListener("click", onBack);
+}
+
+// Modo voz do roleplay (Fase 11, docs/08: grava -> STT local -> LLM ->
+// Piper -> toca). Reaproveita setupRecorder/blobToBase64 (ja usados por
+// ReadAloud/SpokenGapFill/Shadowing) -- diferente do modo texto (input
+// persistente), aqui cada turno RE-RENDERIZA o gravador (grava -> envia ->
+// aparece o proximo gravador), porque cada turno e' grava-e-envia, nao
+// digita-e-envia. "← Sair da conversa" continua sempre visivel, igual ao
+// modo texto (docs/09 achado #13).
+function startVoiceChatSession(sessionId, openingMessage, opts) {
+  const bodyEl = opts.container;
+  bodyEl.innerHTML = `
+    <div class="chat-log" id="chat-log">${chatBubbleHtml("assistant", openingMessage)}</div>
+    <audio id="reply-audio" style="display:none"></audio>
+    <div class="recorder" id="voice-turn"></div>
+    <div class="recorder-actions">
+      <button class="link" id="chat-close-btn" type="button">Encerrar e avaliar</button>
+      <button class="link" id="chat-exit-btn" type="button">← Sair da conversa</button>
+    </div>
+    <div id="chat-evaluation"></div>
+  `;
+
+  const logEl = document.getElementById("chat-log");
+  const replyAudio = document.getElementById("reply-audio");
+  const closeBtn = document.getElementById("chat-close-btn");
+  const exitBtn = document.getElementById("chat-exit-btn");
+
+  function scrollToBottom() {
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function playAudioBase64(base64) {
+    if (!base64) return;
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    replyAudio.src = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+    replyAudio.play().catch(() => {});
+  }
+
+  // fala a mensagem de abertura tambem -- sem isso so' o texto apareceria,
+  // e o usuario escolheu modo voz justamente pra ouvir, nao ler.
+  fetch("/api/roleplay-voice/synthesize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: openingMessage }),
+  })
+    .then((res) => (res.ok ? res.blob() : null))
+    .then((blob) => {
+      if (!blob) return;
+      replyAudio.src = URL.createObjectURL(blob);
+      replyAudio.play().catch(() => {});
+    })
+    .catch(() => {});
+
+  function renderTurnRecorder() {
+    const turnEl = document.getElementById("voice-turn");
+    turnEl.innerHTML = `
+      <button class="primary" id="record-btn" type="button">● Gravar resposta</button>
+      <audio id="preview" controls style="display:none"></audio>
+      <div class="recorder-actions" id="recorder-actions" style="display:none">
+        <button class="link" id="rerecord-btn" type="button">Regravar</button>
+        <button class="primary" id="submit-btn" type="button">Enviar</button>
+      </div>
+    `;
+    let recordedBlob = null;
+    setupRecorder((blob) => {
+      recordedBlob = blob;
+    });
+
+    document.getElementById("submit-btn").addEventListener("click", async () => {
+      const submitBtn = document.getElementById("submit-btn");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Enviando…";
+      const audioBase64 = await blobToBase64(recordedBlob);
+      turnEl.innerHTML = `<p class="loading">Transcrevendo e respondendo…</p>`;
+
+      const res = await fetch(opts.voiceMessageUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, audio_base64: audioBase64 }),
+      });
+      const result = await res.json();
+      if (result.error) {
+        turnEl.innerHTML = `<p class="error">${escapeHtml(result.error)}</p>`;
+        renderTurnRecorder();
+        return;
+      }
+      logEl.insertAdjacentHTML("beforeend", chatBubbleHtml("user", result.user_text));
+      logEl.insertAdjacentHTML("beforeend", chatBubbleHtml("assistant", result.message));
+      scrollToBottom();
+      playAudioBase64(result.audio_base64);
+      renderTurnRecorder();
+    });
+  }
+  renderTurnRecorder();
+
+  exitBtn.addEventListener("click", opts.onExit);
+
+  closeBtn.addEventListener("click", async () => {
+    closeBtn.disabled = true;
+    exitBtn.disabled = true;
+    closeBtn.textContent = "Avaliando…";
+    document.getElementById("voice-turn").innerHTML = "";
+    const res = await fetch(opts.closeUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    const result = await res.json();
+    closeBtn.style.display = "none";
+    if (result.error) {
+      document.getElementById("chat-evaluation").innerHTML = `<p class="error">${escapeHtml(result.error)}</p>`;
+      return;
+    }
+    showRoleplayEvaluation(result.evaluation, opts.onExit);
+  });
+}
+
+// ---------- HostileRoleplayEngine (docs/05 itens 95-98, Grupo D) --------
+// Escada de exposicao: ordem sugerida por intensidade crescente, nunca
+// bloqueada -- usuario pode escolher qualquer cenario a qualquer momento
+// (docs/09 achado #8). Nao depende de session_plans/planejador -- Grupo D
+// e' separado do motor semanal de Grupo B (CLAUDE.md).
+
+async function renderHostileLadder() {
+  currentView = "hostile-ladder";
+  navToggle.textContent = "Planejador";
+  progressEl.textContent = "";
+  main.innerHTML = `<p class="loading">Carregando…</p>`;
+
+  const res = await fetch("/api/hostile-roleplay/scenarios");
+  const data = await res.json();
+
+  main.innerHTML = `
+    <div class="card">
+      <span class="template-label">Contestação hostil</span>
+      <p class="prompt-hint">Escolha um cenário — ordem sugerida por intensidade, nunca travada. Sempre em texto; voz é upgrade opcional (em breve).</p>
+      <div class="ladder" id="ladder"></div>
+      <button class="link" id="back-to-planner" type="button">← Planejador</button>
+    </div>
+  `;
+  document.getElementById("back-to-planner").addEventListener("click", renderPlanner);
+
+  const ladderEl = document.getElementById("ladder");
+  (data.scenarios ?? []).forEach((scenario) => {
+    const item = document.createElement("div");
+    item.className = "ladder-item";
+    const indicatorHtml =
+      scenario.intensity != null
+        ? `<span class="intensity-dots" aria-label="intensidade ${scenario.intensity} de 4">${Array.from(
+            { length: 4 },
+            (_, i) => `<span class="intensity-dot ${i < scenario.intensity ? "filled" : ""}"></span>`
+          ).join("")}</span>`
+        : `<span class="not-hostile-badge">não hostil</span>`;
+    const modePrefix = `ladder-${scenario.key}`;
+    item.innerHTML = `
+      <div class="ladder-item-header">
+        <span class="ladder-item-label">${escapeHtml(scenario.label)}</span>
+        ${indicatorHtml}
+      </div>
+      <p class="prompt-hint">${escapeHtml(scenario.description)}</p>
+      ${scenario.times_completed > 0 ? `<span class="ladder-completed">Praticado ${scenario.times_completed}×</span>` : ""}
+      ${modeToggleHtml(modePrefix)}
+      <button class="primary" type="button">Iniciar</button>
+    `;
+    const startBtn = item.querySelector("button");
+    startBtn.addEventListener("click", async () => {
+      const mode = getSelectedMode(modePrefix);
+      startBtn.disabled = true;
+      startBtn.textContent = "Iniciando…";
+      const res = await fetch("/api/hostile-roleplay/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persona: scenario.key }),
+      });
+      const result = await res.json();
+      if (result.error) {
+        item.insertAdjacentHTML("beforeend", `<p class="error">${escapeHtml(result.error)}</p>`);
+        startBtn.disabled = false;
+        startBtn.textContent = "Iniciar";
+        return;
+      }
+      renderHostileChat(scenario, result.session_id, result.message, mode);
+    });
+    ladderEl.appendChild(item);
+  });
+}
+
+function renderHostileChat(scenario, sessionId, openingMessage, mode) {
+  currentView = "hostile-chat";
+  navToggle.textContent = "Planejador";
+  const title = scenario.group === "hostile" ? `Contestação hostil — ${escapeHtml(scenario.label)}` : escapeHtml(scenario.label);
+  main.innerHTML = `
+    <div class="card">
+      <span class="template-label">${title}</span>
+      <div id="hostile-chat-body"></div>
+    </div>
+  `;
+  const start = mode === "voice" ? startVoiceChatSession : startChatSession;
+  start(sessionId, openingMessage, {
+    container: document.getElementById("hostile-chat-body"),
+    messageUrl: "/api/hostile-roleplay/message",
+    voiceMessageUrl: "/api/roleplay-voice/message",
+    closeUrl: "/api/hostile-roleplay/close",
+    onExit: renderHostileLadder,
+  });
+}
+
+// ---------- QuickOpinionSpeechEngine (docs/05 item 103) -- flash prompt,
+// resposta unica (nao e' chat), rubrica leve. Sem plano necessario, mesmo
+// espirito on-demand do Grupo D.
+
+async function renderQuickOpinion() {
+  currentView = "quick-opinion";
+  navToggle.textContent = "Planejador";
+  progressEl.textContent = "";
+  main.innerHTML = `<p class="loading">Gerando tópico…</p>`;
+
+  const res = await fetch("/api/quick-opinion");
+  const data = await res.json();
+  if (data.error) {
+    main.innerHTML = `
+      <div class="card">
+        <p class="error">${escapeHtml(data.error)}</p>
+        <button class="link" id="back-to-planner" type="button">← Planejador</button>
+      </div>
+    `;
+    document.getElementById("back-to-planner").addEventListener("click", renderPlanner);
+    return;
+  }
+
+  main.innerHTML = `
+    <div class="card">
+      <span class="template-label">Speech rápido — Einerseits... andererseits...</span>
+      <p class="prompt">${escapeHtml(data.topic)}</p>
+      <label>Sua resposta (em alemão, curta e espontânea)
+        <textarea class="text-input" id="quick-input" rows="4" autofocus></textarea>
+      </label>
+      <div class="recorder-actions">
+        <button class="primary" id="quick-submit-btn" type="button">Enviar</button>
+        <button class="link" id="back-to-planner" type="button">← Planejador</button>
+      </div>
+      <div id="quick-result"></div>
+    </div>
+  `;
+  document.getElementById("back-to-planner").addEventListener("click", renderPlanner);
+
+  document.getElementById("quick-submit-btn").addEventListener("click", async () => {
+    const input = document.getElementById("quick-input");
+    const text = input.value.trim();
+    if (!text) return;
+    const btn = document.getElementById("quick-submit-btn");
+    btn.disabled = true;
+    btn.textContent = "Avaliando…";
+    input.disabled = true;
+
+    const res = await fetch("/api/quick-opinion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic: data.topic, text }),
+    });
+    const result = await res.json();
+    btn.style.display = "none";
+    if (result.error) {
+      document.getElementById("quick-result").innerHTML = `<p class="error">${escapeHtml(result.error)}</p>`;
+      input.disabled = false;
+      btn.style.display = "";
+      btn.disabled = false;
+      btn.textContent = "Enviar";
+      return;
+    }
+    showQuickOpinionResult(result.correction);
+  });
+}
+
+function showQuickOpinionResult(rubric) {
+  const el = document.getElementById("quick-result");
+  const errorsHtml = (rubric.errors ?? [])
+    .map(
+      (e) => `
+      <li>
+        <span class="essay-error-trecho">"${escapeHtml(e.trecho)}"</span>
+        <span class="essay-error-problema">${escapeHtml(e.problema)}</span>
+        <span class="essay-error-sugestao">→ ${escapeHtml(e.sugestao)}</span>
+      </li>`
+    )
+    .join("");
+  const strengthsHtml = (rubric.strengths ?? []).map((s) => `<li>${escapeHtml(s)}</li>`).join("");
+
+  el.innerHTML = `
+    ${showedUpBadgeHtml("Você respondeu — isso já conta.")}
+    <div class="structure-badge ${rubric.used_contrast_structure ? "ok" : "missing"}">
+      ${rubric.used_contrast_structure ? "✓" : "○"} Contrastou dois lados (einerseits/andererseits)
+    </div>
+    ${strengthsHtml ? `<div class="feedback correct"><strong>Pontos fortes</strong><ul>${strengthsHtml}</ul></div>` : ""}
+    ${errorsHtml ? `<div class="feedback incorrect"><strong>A revisar</strong><ul class="essay-errors">${errorsHtml}</ul></div>` : ""}
+    <span class="cefr-estimate">Nível estimado: ${escapeHtml(rubric.cefr_estimate ?? "—")}</span>
+    <div class="recorder-actions">
+      <button class="link" id="quick-again-btn" type="button">Outro tópico →</button>
+      <button class="link" id="back-after-quick" type="button">← Planejador</button>
+    </div>
+  `;
+  document.getElementById("quick-again-btn").addEventListener("click", renderQuickOpinion);
+  document.getElementById("back-after-quick").addEventListener("click", renderPlanner);
 }
 
 navToggle.addEventListener("click", () => {
@@ -1131,10 +1506,19 @@ function renderDictation(ex) {
   // audio-primeiro: prompt chega null da API de proposito (regra do
   // projeto -- nunca mostrar a frase-fonte antes da tentativa). Replay
   // ilimitado (docs/08/docs/03: nunca "so uma chance", ansiedade social).
+  // Fase 12 -- achado: a variante autentica (source_type='authentic_video',
+  // Fase 6) tem audio_ref NULL de proposito (a fonte e' o video, tocado via
+  // iframe do YouTube, mesmo mecanismo do VideoTaskEngine) -- nunca tinha
+  // sido ligada aqui, ficava sem tocar nada. Escolhe o player pela presenca
+  // de audio_url vs. video_url, mesmo dado que a sessao ja entrega pra
+  // TODOS os templates (session.ts).
+  const playerHtml = ex.audio_url
+    ? `<audio id="player" src="${ex.audio_url}" controls preload="auto"></audio>`
+    : `<div class="video-wrap"><iframe id="player" src="${youtubeEmbedUrl(ex)}" title="vídeo" frameborder="0" allow="autoplay" allowfullscreen></iframe></div>`;
   main.innerHTML = `
     <div class="card">
       <span class="template-label">${templateLabel(ex.template)}</span>
-      <audio id="player" src="${ex.audio_url}" controls preload="auto"></audio>
+      ${playerHtml}
       <input type="text" class="text-input" id="answer" autocomplete="off"
              placeholder="Digite o que você ouviu" autofocus />
       <button class="primary" id="submit">Verificar</button>
@@ -1143,7 +1527,9 @@ function renderDictation(ex) {
   `;
   const input = document.getElementById("answer");
   const submit = document.getElementById("submit");
-  document.getElementById("player").play().catch(() => {}); // autoplay pode falhar, sem problema
+  if (ex.audio_url) {
+    document.getElementById("player").play().catch(() => {}); // autoplay pode falhar, sem problema
+  }
   input.focus();
   const doSubmit = () => submitAttempt(ex.id, input.value);
   submit.addEventListener("click", doSubmit);
@@ -1426,6 +1812,18 @@ function advance() {
     return;
   }
   renderCurrent();
+}
+
+// Fase 12 (docs/09, achado de UX -- "ShowedUpBadge"): nos engines com
+// rubrica LLM (OpinionEssay, roleplay, QuickOpinion), showed_up e' sempre
+// true no schema, mas nunca tinha um reconhecimento VISUAL separado antes
+// da critica -- separacao so' no JSON nao basta, se os dois aparecem na
+// mesma area visual o efeito pratico de "misturar validacao de exposicao
+// com feedback de idioma" (que o CLAUDE.md proibe) acontece por
+// proximidade mesmo assim. Pill isolado, sempre o PRIMEIRO elemento,
+// visualmente distinto do bloco de correcao (`.feedback`) que vem depois.
+function showedUpBadgeHtml(text) {
+  return `<div class="showed-up-badge">✓ ${escapeHtml(text)}</div>`;
 }
 
 function escapeHtml(s) {

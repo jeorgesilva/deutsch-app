@@ -19,6 +19,7 @@ Uso:
 import argparse
 import json
 import time
+import unicodedata
 from pathlib import Path
 
 from ..ingest.write_exercises import build_insert, execute_d1, query_d1
@@ -62,7 +63,17 @@ def load_phonetic_points(point_ids: list[int] | None = None) -> list[PhoneticPoi
 
 
 def safe_slug(text: str) -> str:
-    return "".join(c if c.isalnum() else "-" for c in text.lower()).strip("-")[:60]
+    # Fase 12 -- achado da Fase 9: `c.isalnum()` sozinho mantem letra
+    # acentuada (e' unicode-alfanumerica em Python), o que gerava chave de
+    # objeto R2 nao-ASCII e corrompia silenciosamente a leitura via
+    # `env.MEDIA.get()` do Worker (upload reportava sucesso, objeto nunca
+    # ficava recuperavel -- CLAUDE.md, Fase 9). NFKD decompoe acento em
+    # base+diacritico combinante; o encode/decode ascii com errors="ignore"
+    # descarta o diacritico, mantendo so a letra base (a-vs-ã). Corrigido
+    # so nos dados ja gerados antes -- este fix e' pro GERADOR, pra lotes
+    # futuros ja nascerem ASCII-safe.
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    return "".join(c if c.isalnum() else "-" for c in ascii_text.lower()).strip("-")[:60]
 
 
 def main():

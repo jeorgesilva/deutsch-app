@@ -39,15 +39,31 @@ def load_segments(video_clip_id: int) -> list[dict]:
     )
 
 
-def pick_quote_segments(segments: list[dict], n: int) -> list[dict]:
+def pick_quote_segments(segments: list[dict], n: int, offset: int = 0) -> list[dict]:
     """Escolhe segmentos de tamanho medio (nem fragmento minusculo tipo 'Ja.',
     nem frase truncada demais) -- espalhados ao longo do clipe, nao todos do
-    comeco."""
+    comeco.
+
+    `offset` desloca o ponto de partida da amostragem -- Fase 12, achado
+    real: "citar" (VideoTaskEngine) e a variante autentica do
+    DictationEngine chamavam esta funcao com os MESMOS argumentos (mesmos
+    `segments`, mesmo `n`), entao sempre pegavam exatamente os mesmos
+    segmentos -- redundancia cosmetica com 1 video so, mas viraria
+    problema real ao escalar pra mais videos (CLAUDE.md, "Pendencia
+    conhecida" da Fase 6). Chamadores agora passam offsets diferentes por
+    engine (ver ENGINE_OFFSETS) pra sair com trechos DIFERENTES do mesmo
+    clipe."""
     candidates = [s for s in segments if MIN_QUOTE_LEN <= len(s["text"]) <= MAX_QUOTE_LEN]
     if len(candidates) <= n:
         return candidates
     step = len(candidates) // n
-    return [candidates[i * step] for i in range(n)]
+    start = offset % step
+    return [candidates[(start + i * step) % len(candidates)] for i in range(n)]
+
+
+# offset por engine -- so importa quando as DUAS rodam contra o mesmo
+# video_clip_id (caso comum: "citar" e "dictation" no mesmo video).
+ENGINE_OFFSETS = {"citar": 0, "dictation": 1}
 
 
 def write_exercise(prompt, accepted_answers, exercise_template_id, video_clip_id, generated_by, source_type=None):
@@ -92,7 +108,7 @@ def main():
               f"{len(full_text.split())} palavras no gabarito")
         return
 
-    quotes = pick_quote_segments(segments, args.n_items)
+    quotes = pick_quote_segments(segments, args.n_items, offset=ENGINE_OFFSETS.get(args.engine, 0))
     template_id = templates["VideoTaskEngine"] if args.engine == "citar" else templates["DictationEngine"]
     written = 0
     for seg in quotes:

@@ -27,6 +27,7 @@ from flask import Flask, jsonify, request
 from .recognize import phone_diff, recognize_wav2vec
 from .stt import transcribe
 from .target_ipa import target_ipa
+from ..tts.synthesize import synthesize_to_file
 
 app = Flask(__name__)
 
@@ -105,6 +106,45 @@ def score_spokengapfill():
             "alignment": diff["alignment"],
         },
     })
+
+
+@app.post("/transcribe")
+def transcribe_endpoint():
+    # Fase 11 -- STT avulso pro loop de voz do Grupo D (docs/08: grava ->
+    # faster-whisper local -> LLM -> Piper -> toca). Diferente de
+    # /score-spokengapfill, aqui nao ha `accepted_answers` nem checagem de
+    # pronuncia -- so a transcricao crua, que o Worker manda pro mecanismo
+    # de roleplay (ja existente) como se fosse a fala do usuario digitada.
+    body = request.get_json(force=True)
+    audio_base64 = body.get("audio_base64")
+    if not audio_base64:
+        return jsonify({"error": "audio_base64 e obrigatorio"}), 400
+
+    wav_path = _decode_audio_to_wav(audio_base64)
+    text = transcribe(wav_path)
+    return jsonify({"text": text})
+
+
+@app.post("/synthesize")
+def synthesize_endpoint():
+    # Fase 11 -- TTS avulso pro loop de voz do Grupo D. Diferente da
+    # geracao em lote de audio-gabarito (tts/synthesize.py chamado pelos
+    # scripts generate_dictation_batch.py etc., que sobem pro R2), aqui a
+    # sintese e' de uma fala de LLM em tempo real dentro de uma conversa --
+    # nao ha exercicio nem audio_ref pra persistir, o audio existe so' pra
+    # esse turno. Devolvido em base64 no JSON (nao like /media/, que serve
+    # bytes crus do R2) porque quem chama (Worker) precisa combinar isso
+    # com texto (transcricao do usuario + resposta da persona) na mesma
+    # resposta.
+    body = request.get_json(force=True)
+    text = body.get("text")
+    if not text:
+        return jsonify({"error": "text e obrigatorio"}), 400
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="deutsch_tts_"))
+    wav_path = synthesize_to_file(text, tmp_dir / "out.wav")
+    audio_b64 = base64.b64encode(wav_path.read_bytes()).decode("ascii")
+    return jsonify({"audio_base64": audio_b64})
 
 
 def main():

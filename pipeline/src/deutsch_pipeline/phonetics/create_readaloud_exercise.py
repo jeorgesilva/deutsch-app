@@ -15,6 +15,7 @@ Uso:
         --content-topic-id 1
 """
 import argparse
+import unicodedata
 from pathlib import Path
 
 from ..ingest.write_exercises import build_insert, execute_d1, query_d1
@@ -29,7 +30,13 @@ def create_readaloud_exercise(sentence: str, content_topic_id: int | None, voice
     exercise_template_id = templates["ReadAloudEngine"]
 
     AUDIO_TMP_DIR.mkdir(parents=True, exist_ok=True)
-    slug = "".join(c if c.isalnum() else "-" for c in sentence.lower()).strip("-")[:40]
+    # Fase 12 -- mesmo fix de generate_dictation_batch.py::safe_slug: frase
+    # alema quase sempre tem umlaut/ß, que `isalnum()` mantem (e' unicode-
+    # alfanumerico) e corrompe a chave do objeto R2 (CLAUDE.md, achado da
+    # Fase 9). NFKD decompoe acento em base+diacritico, o encode ascii
+    # descarta o diacritico.
+    ascii_sentence = unicodedata.normalize("NFKD", sentence).encode("ascii", "ignore").decode("ascii")
+    slug = "".join(c if c.isalnum() else "-" for c in ascii_sentence.lower()).strip("-")[:40]
     audio_path = AUDIO_TMP_DIR / f"readaloud_{slug}.wav"
     synthesize_to_file(sentence, audio_path, voice_name=voice)
     object_key = f"readaloud/{slug}.wav"
