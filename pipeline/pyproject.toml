@@ -1,0 +1,32 @@
+[project]
+name = "deutsch-pipeline"
+version = "0.1.0"
+description = "Pipeline offline de geracao, validacao e enriquecimento de exercicios de alemao"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas",
+    "openpyxl",
+    "spacy",
+    "language-tool-python",
+    "requests",
+    "ollama",           # cliente python p/ Ollama local (motor de geracao)
+    "gensim",           # carregar vetores fastText de palavra (dedupe na mineracao de video)
+    "py-openthesaurus", # sinonimo/registro formal, geracao de distratores
+    "yt-dlp",           # extrair legenda/transcricao real de video (ver docs/07-sourcing-de-video.md)
+    "phonemizer",       # G2P via espeak-ng: gera o IPA-alvo (ver docs/08-fonetica-e-fala.md)
+    "transformers",     # roda o wav2vec2-lv-60-espeak-cv-ft (reconhecimento de fonemas)
+    "torch",            # backend de inferencia do transformers/wav2vec2
+    "allosaurus",       # reconhecedor de fones universal, candidato alternativo ao wav2vec2
+    "faster-whisper",   # STT local (roleplay de voz, SpokenGapFillEngine, checagem lexical)
+    "praat-parselmouth", # duracao/formante p/ contrastes de Alta prioridade (Stadt/Staat, Umlaute)
+    "flask",             # servico HTTP local p/ ReadAloudEngine/SpokenGapFillEngine -- o Worker
+                          # (Cloudflare) nao roda PyTorch, entao a correcao fonetica precisa de um
+                          # endpoint separado rodando na maquina do usuario (ver CLAUDE.md, Fase 9)
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

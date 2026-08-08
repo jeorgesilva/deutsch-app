@@ -1,0 +1,17 @@
+node_modules/
+.wrangler/
+dist/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.env
+.dev.vars
+client_secret*.json
+*credentials*.json
+*.db
+.DS_Store
+pipeline/output/
+pipeline/models/
+openai.json
+recordings/

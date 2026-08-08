@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deutsch</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="progress" id="progress" aria-live="polite"></div>
+      <button class="link" id="nav-toggle" type="button">Planejador</button>
+    </header>
+
+    <div class="banner banner-hidden" id="banner"></div>
+
+    <main id="main" class="main">
+      <p class="loading">Carregando sessão…</p>
+    </main>
+  </div>
+
+  <!-- RecordedOpinionEngine (docs/05 itens 5/25): upload pro Google Drive
+       direto do navegador, sem servico local -- so' precisa do client de
+       token da Google Identity Services. -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- VideoMiningEngine (docs/05 item 3): YouTube IFrame Player API, so'
+       carregada quando o usuario realmente abre a mineracao de video
+       (app.js chama loadYouTubeApi() sob demanda) -- este tag so' declara
+       o global window.onYouTubeIframeAPIReady antes do app.js rodar. -->
+  <script src="/app.js"></script>
+</body>
+</html>

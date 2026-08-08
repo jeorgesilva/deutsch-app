@@ -1,0 +1,21 @@
+name = "deutsch-app"
+compatibility_date = "2026-07-31"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "deutsch-db"
+database_id = "38bafa99-fe7f-415f-804b-139bf444b918"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "deutsch-media"
+
+# PHONETIC_SERVICE_URL fica em .dev.vars (gitignored), nao aqui -- achado
+# real nesta sessao: adicionar uma secao [vars] neste arquivo muda o hash
+# que `wrangler pages dev` usa pra identificar o arquivo D1 local, mas
+# `wrangler d1 execute --local` (CLI) continua resolvendo pelo database_id
+# de sempre -- os dois passam a apontar pra ARQUIVOS SQLITE DIFERENTES,
+# mesma classe de incidente ja documentado (troca de database_id). Quase
+# corrompeu o banco local reconciliando na mao. .dev.vars nao muda esse
+# hash -- CLAUDE.md tem o registro completo.

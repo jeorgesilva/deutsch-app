@@ -1,0 +1,25 @@
+{
+  "name": "deutsch-app",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "wrangler pages dev",
+    "deploy": "wrangler pages deploy",
+    "db:migrate:local": "wrangler d1 execute deutsch-db --local --file=migrations/0001_init.sql",
+    "db:migrate:remote": "wrangler d1 execute deutsch-db --remote --file=migrations/0001_init.sql",
+    "db:seed:local": "wrangler d1 execute deutsch-db --local --file=migrations/0002_seed_content.sql",
+    "db:seed:remote": "wrangler d1 execute deutsch-db --remote --file=migrations/0002_seed_content.sql",
+    "db:seed-templates:local": "wrangler d1 execute deutsch-db --local --file=migrations/0003_seed_topic_template_map.sql",
+    "db:seed-templates:remote": "wrangler d1 execute deutsch-db --remote --file=migrations/0003_seed_topic_template_map.sql",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260804.1",
+    "typescript": "^5",
+    "vitest": "^2",
+    "wrangler": "^4"
+  },
+  "dependencies": {
+    "ts-fsrs": "^4"
+  }
+}
