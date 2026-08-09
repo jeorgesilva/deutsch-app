@@ -64,8 +64,20 @@ export default {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
 
-    const container = env.GENERATION_CONTAINER.getByName(SINGLETON_ID);
-    await container.startAndWaitForPorts();
-    return container.fetch(request);
+    try {
+      const container = env.GENERATION_CONTAINER.getByName(SINGLETON_ID);
+      await container.startAndWaitForPorts();
+      return await container.fetch(request);
+    } catch (err) {
+      // nunca deixar isso virar a pagina generica "error code: 1101" do
+      // Cloudflare -- devolve o erro de verdade pro chamador (docs/16:
+      // "tratar cota estourada/provedor indisponivel como erro legivel,
+      // nunca travamento silencioso" -- vale igual pra falha do proprio
+      // container, achado depurando o primeiro deploy real).
+      return Response.json(
+        { error: `container error: ${(err as Error).message}`, stack: (err as Error).stack },
+        { status: 502 }
+      );
+    }
   },
 };
