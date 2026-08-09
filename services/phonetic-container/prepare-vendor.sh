@@ -18,6 +18,21 @@ mkdir -p "$DEST/src/deutsch_pipeline/phonetics" "$DEST/src/deutsch_pipeline/tts"
 cp "$REPO_ROOT/pipeline/src/deutsch_pipeline/__init__.py" "$DEST/src/deutsch_pipeline/__init__.py"
 cp "$REPO_ROOT/pipeline/src/deutsch_pipeline/phonetics/"*.py "$DEST/src/deutsch_pipeline/phonetics/"
 cp "$REPO_ROOT/pipeline/src/deutsch_pipeline/tts/"*.py "$DEST/src/deutsch_pipeline/tts/"
-cp "$REPO_ROOT/pipeline/models/tts/"*.onnx* "$DEST/models/tts/"
+
+# pipeline/models/tts/*.onnx e' gitignored (binario grande, CLAUDE.md) --
+# existe na maquina de quem gerou/baixou localmente, mas NAO no checkout
+# do GitHub Actions. Copia se existir; senao baixa da mesma fonte publica
+# do catalogo Piper (rhasspy/piper-voices no HF Hub) -- mesmo mecanismo
+# que `python -m piper.download_voices` usa por baixo, sem precisar
+# instalar o pacote piper-tts so' pra isso.
+VOICE="de_DE-thorsten-high"
+if compgen -G "$REPO_ROOT/pipeline/models/tts/*.onnx*" > /dev/null; then
+  cp "$REPO_ROOT/pipeline/models/tts/"*.onnx* "$DEST/models/tts/"
+else
+  echo "modelo de voz nao encontrado localmente -- baixando $VOICE do HF Hub"
+  BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/high"
+  curl -fL "$BASE_URL/$VOICE.onnx" -o "$DEST/models/tts/$VOICE.onnx"
+  curl -fL "$BASE_URL/$VOICE.onnx.json" -o "$DEST/models/tts/$VOICE.onnx.json"
+fi
 
 echo "vendorizado em $(pwd)/vendor"
