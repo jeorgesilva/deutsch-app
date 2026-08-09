@@ -56,6 +56,25 @@ export const TARGET_AUDIO_HIDDEN_TEMPLATES = new Set(["ReadAloudEngine", "Spoken
 
 export type SupportedTemplate = (typeof SUPPORTED_TEMPLATES)[number];
 
+// Fase "home por categoria" (docs/12) -- subconjuntos de SUPPORTED_TEMPLATES
+// usados pra escopar a sessao por grupo de navegacao (content_topics vs
+// phonetic_points). ShadowingEngine tem phonetic_point_id igual ao
+// DictationEngine (e' um clone do audio dele, Fase 10) mas fica de fora do
+// grupo Fonetica -- pertence a "Pratica semanal" por decisao do docs/12,
+// entao o filtro e' pelo nome do template, nao so' "tem phonetic_point_id".
+export const GRAMMAR_TEMPLATES = [
+  "GapFillGovernanceEngine",
+  "FillBlankEngine",
+  "WordBankGuessEngine",
+  "StructuralTransformEngine",
+  "RegisterReformulationEngine",
+  "UnscrambleEngine",
+  "ReadAloudEngine",
+  "SpokenGapFillEngine",
+] as const;
+
+export const PHONETICS_TEMPLATES = ["DictationEngine"] as const;
+
 export interface ExerciseRow {
   id: number;
   exercise_template_id: number;

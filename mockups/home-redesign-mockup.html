@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deutsch — protótipo de home</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css" />
+<style>
+  :root {
+    --ink: #1c1f22;
+    --ink-soft: #5a6169;
+    --paper: #fafaf8;
+    --line: #e3e2dd;
+    --accent: #3d5a80;
+    --accent-soft: #eaf0f6;
+    --good: #2f7d4f;
+    --good-soft: #e7f4ec;
+    --caution: #92400e;
+    --caution-soft: #fdf1e0;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #efeee9;
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .mockup-chrome {
+    max-width: 74rem;
+    margin: 0 auto;
+    padding: 1rem 1.25rem 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .mockup-chrome .label {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+  .view-toggle {
+    display: inline-flex;
+    border: 1.5px solid var(--line);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .view-toggle button {
+    font-family: inherit;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.9rem;
+    border: none;
+    background: white;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .view-toggle button.active {
+    background: var(--accent);
+    color: white;
+  }
+  .stage {
+    max-width: 74rem;
+    margin: 0 auto;
+    padding: 1.25rem;
+    display: flex;
+    justify-content: center;
+  }
+  .device {
+    width: 100%;
+    background: var(--paper);
+    border-radius: 16px;
+    box-shadow: 0 0 0 1px var(--line);
+    overflow: hidden;
+    transition: max-width 0.15s ease;
+  }
+  .device.desktop { max-width: 74rem; }
+  .device.mobile { max-width: 23rem; }
+  .app {
+    min-height: 32rem;
+    padding: 1.25rem 1.25rem 3rem;
+  }
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 1.25rem;
+  }
+  .wordmark { font-weight: 600; font-size: 1.05rem; }
+  .topbar-actions { display: flex; gap: 1rem; }
+  .topbar-actions button.link { font-size: 0.85rem; }
+  button.link {
+    background: none; border: none; color: var(--ink-soft);
+    font-size: 0.9rem; cursor: pointer; padding: 0;
+    text-decoration: underline; font-family: inherit;
+  }
+  .greeting {
+    font-size: 1.3rem;
+    font-weight: 500;
+    margin: 0 0 1.25rem;
+  }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  .review-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.9rem 1.1rem;
+    border-radius: var(--radius);
+    background: var(--caution-soft);
+    color: var(--caution);
+    margin-bottom: 1.5rem;
+  }
+  .review-banner .txt { display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; }
+  .review-banner button {
+    font-family: inherit; font-size: 0.85rem; font-weight: 600;
+    padding: 0.45rem 0.9rem; border-radius: 999px; border: 1.5px solid var(--caution);
+    background: transparent; color: var(--caution); cursor: pointer; white-space: nowrap;
+  }
+
+  .group-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  .device.mobile .group-grid { grid-template-columns: 1fr; }
+
+  .group-card {
+    text-align: left;
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    padding: 1.1rem;
+    background: white;
+    cursor: pointer;
+    font-family: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    transition: border-color 0.1s ease;
+  }
+  .group-card:hover { border-color: var(--accent); }
+  .group-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .group-icon {
+    width: 2.4rem; height: 2.4rem; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+  }
+  .group-title { font-weight: 600; font-size: 1.02rem; }
+  .group-sub { font-size: 0.85rem; color: var(--ink-soft); }
+  .group-meta {
+    margin-top: auto;
+    display: flex; align-items: center; gap: 0.4rem;
+    font-size: 0.78rem; font-weight: 600;
+  }
+  .group-meta.due { color: var(--caution); }
+  .group-meta.mastery { color: var(--good); }
+  .group-meta.neutral { color: var(--ink-soft); font-weight: 400; }
+
+  .crumb {
+    display: flex; align-items: center; gap: 0.4rem;
+    margin-bottom: 1rem;
+  }
+  .crumb button {
+    font-family: inherit; background: none; border: none; cursor: pointer;
+    color: var(--ink-soft); font-size: 0.9rem; padding: 0; display: flex; align-items: center; gap: 0.3rem;
+  }
+  .crumb button:hover { color: var(--accent); }
+
+  .screen-title { font-size: 1.25rem; font-weight: 500; margin: 0 0 0.3rem; }
+  .screen-sub { font-size: 0.88rem; color: var(--ink-soft); margin: 0 0 1.1rem; }
+
+  .filter-row {
+    display: flex; flex-wrap: wrap; gap: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .filter-chip {
+    font-family: inherit; font-size: 0.82rem;
+    padding: 0.4rem 0.85rem; border-radius: 999px;
+    border: 1.5px solid var(--line); background: white; color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .filter-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  .topic-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.85rem;
+  }
+  .device.mobile .topic-grid { grid-template-columns: 1fr 1fr; }
+  .topic-card {
+    text-align: left;
+    border: 1.5px solid var(--line);
+    border-radius: var(--radius);
+    padding: 0.85rem 0.9rem;
+    background: white;
+    cursor: pointer;
+    font-family: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .topic-card:hover { border-color: var(--accent); }
+  .topic-num { font-size: 0.72rem; color: var(--ink-soft); }
+  .topic-name { font-size: 0.92rem; font-weight: 500; line-height: 1.3; }
+  .topic-bar-track { height: 4px; border-radius: 999px; background: var(--line); overflow: hidden; }
+  .topic-bar-fill { height: 100%; background: var(--good); }
+  .topic-count { font-size: 0.74rem; color: var(--ink-soft); }
+
+  .block-grid { display: flex; flex-direction: column; gap: 0.9rem; }
+  .block-card {
+    text-align: left;
+    display: flex; align-items: center; gap: 1rem;
+    border: 1.5px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    background: white; cursor: pointer; font-family: inherit;
+  }
+  .block-card:hover { border-color: var(--accent); }
+  .block-thumb {
+    flex-shrink: 0; width: 3rem; height: 3rem; border-radius: 8px;
+    background: var(--accent-soft); color: var(--accent);
+    display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+  }
+  .block-info { flex: 1; min-width: 0; }
+  .block-title { font-weight: 600; font-size: 0.98rem; }
+  .block-teaser { font-size: 0.85rem; color: var(--ink-soft); margin-top: 0.15rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .block-status { font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+  .block-status.done { color: var(--good); }
+  .block-status.progress { color: var(--caution); }
+  .block-status.new { color: var(--accent); }
+
+  .reading-text {
+    background: white; border: 1.5px solid var(--line); border-radius: var(--radius);
+    padding: 1rem 1.1rem; margin-bottom: 1.25rem; max-height: 9rem; overflow-y: auto;
+    font-size: 0.95rem; color: var(--ink-soft); line-height: 1.6;
+  }
+  .reading-text .title { color: var(--ink); font-weight: 600; margin: 0 0 0.4rem; font-size: 1rem; }
+
+  .block-progress-row {
+    display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem;
+  }
+  .block-dot {
+    width: 0.6rem; height: 0.6rem; border-radius: 999px; background: var(--line);
+  }
+  .block-dot.done { background: var(--good); }
+  .block-dot.current { background: var(--accent); width: 0.75rem; height: 0.75rem; }
+  .block-progress-label { font-size: 0.8rem; color: var(--ink-soft); margin-left: 0.4rem; }
+
+  .exercise-card {
+    border: 1.5px solid var(--line); border-radius: var(--radius);
+    padding: 1.25rem; background: white;
+  }
+  .template-label {
+    font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
+    margin-bottom: 0.6rem;
+  }
+  .prompt { font-size: 1.15rem; line-height: 1.5; font-weight: 500; margin-bottom: 1rem; }
+  .text-input {
+    width: 100%; font-size: 1.05rem; padding: 0.65rem 0.8rem;
+    border: 1.5px solid var(--line); border-radius: var(--radius); background: white; color: var(--ink);
+    margin-bottom: 0.9rem;
+  }
+  button.primary {
+    font-size: 1rem; font-weight: 600; padding: 0.65rem 1.15rem;
+    border-radius: var(--radius); border: none; background: var(--accent); color: white; cursor: pointer;
+    font-family: inherit;
+  }
+
+  .preview-note {
+    display: flex; gap: 0.9rem; align-items: flex-start;
+    border: 1.5px dashed var(--line); border-radius: var(--radius);
+    padding: 1.1rem; background: white; font-size: 0.9rem; color: var(--ink-soft);
+  }
+  .preview-note i { font-size: 1.3rem; color: var(--accent); flex-shrink: 0; margin-top: 0.1rem; }
+
+  .annot {
+    margin-top: 1.5rem; padding: 0.9rem 1.1rem; border-radius: var(--radius);
+    background: var(--accent-soft); color: var(--ink-soft); font-size: 0.85rem; line-height: 1.55;
+  }
+  .annot b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="mockup-chrome">
+  <span class="label">Protótipo de navegação — home, gramática, leitura</span>
+  <div class="view-toggle">
+    <button id="btn-desktop" class="active">Desktop</button>
+    <button id="btn-mobile">Mobile</button>
+  </div>
+</div>
+
+<div class="stage">
+<div class="device desktop" id="device">
+<div class="app">
+
+  <div class="topbar">
+    <span class="wordmark">Deutsch</span>
+    <div class="topbar-actions">
+      <button class="link">Trocar senha</button>
+      <button class="link">Sair</button>
+    </div>
+  </div>
+
+  <!-- ===================== HOME ===================== -->
+  <div class="screen active" data-screen="home">
+    <p class="greeting">O que você quer praticar hoje?</p>
+
+    <div class="review-banner">
+      <span class="txt"><i class="ti ti-repeat"></i> 8 itens prontos pra revisão espaçada</span>
+      <button data-goto="gram-topic" data-title="Revisão de hoje (o sistema escolhe)">Revisão de hoje →</button>
+    </div>
+
+    <div class="group-grid">
+      <button class="group-card" data-goto="gramatica">
+        <span class="group-icon"><i class="ti ti-language"></i></span>
+        <span class="group-title">Gramática &amp; vocabulário</span>
+        <span class="group-sub">18 categorias · 100 tópicos</span>
+        <span class="group-meta due"><i class="ti ti-clock" style="font-size:0.9rem"></i> 6 pendentes</span>
+      </button>
+
+      <button class="group-card" data-goto="fonetica">
+        <span class="group-icon"><i class="ti ti-microphone-2"></i></span>
+        <span class="group-title">Fonética</span>
+        <span class="group-sub">8 categorias · 26 pontos</span>
+        <span class="group-meta neutral">2 pendentes</span>
+      </button>
+
+      <button class="group-card" data-goto="leitura">
+        <span class="group-icon"><i class="ti ti-news"></i></span>
+        <span class="group-title">Leitura</span>
+        <span class="group-sub">Textos com exercícios ligados</span>
+        <span class="group-meta neutral">1 em andamento</span>
+      </button>
+
+      <button class="group-card" data-goto="video">
+        <span class="group-icon"><i class="ti ti-video"></i></span>
+        <span class="group-title">Vídeo</span>
+        <span class="group-sub">Clipes reais da DW</span>
+        <span class="group-meta neutral">3 disponíveis</span>
+      </button>
+
+      <button class="group-card" data-goto="semanal">
+        <span class="group-icon"><i class="ti ti-calendar-event"></i></span>
+        <span class="group-title">Prática semanal</span>
+        <span class="group-sub">Shadowing, opinião, mineração de vídeo</span>
+        <span class="group-meta neutral">Planejador →</span>
+      </button>
+
+      <button class="group-card" data-goto="conversas">
+        <span class="group-icon"><i class="ti ti-messages"></i></span>
+        <span class="group-title">Conversas</span>
+        <span class="group-sub">Contestação hostil, speech rápido</span>
+        <span class="group-meta neutral">5 cenários</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================== GRAMÁTICA ===================== -->
+  <div class="screen" data-screen="gramatica">
+    <div class="crumb"><button data-goto="home"><i class="ti ti-arrow-left"></i> Início</button></div>
+    <p class="screen-title">Gramática &amp; vocabulário</p>
+    <p class="screen-sub">Escolha uma categoria. Dentro dela os formatos de exercício se intercalam — ou filtre por um formato específico.</p>
+
+    <div class="filter-row" id="format-filter">
+      <button class="filter-chip on">Todos os formatos</button>
+      <button class="filter-chip">Lacuna</button>
+      <button class="filter-chip">Reordenar</button>
+      <button class="filter-chip">Transformação</button>
+      <button class="filter-chip">Múltipla escolha</button>
+      <button class="filter-chip">Ditado</button>
+    </div>
+
+    <div class="topic-grid" id="gram-grid"></div>
+  </div>
+
+  <!-- ===================== TÓPICO (exemplo de exercício) ===================== -->
+  <div class="screen" data-screen="gram-topic">
+    <div class="crumb"><button data-goto="gramatica"><i class="ti ti-arrow-left"></i> Gramática &amp; vocabulário</button></div>
+    <p class="screen-title" id="gram-topic-title">Präpositionen</p>
+    <p class="screen-sub">Sessão intercalada só com tópicos desta categoria — nunca o mesmo formato duas vezes seguidas.</p>
+    <div class="exercise-card">
+      <p class="template-label">Lacuna</p>
+      <p class="prompt">Ich freue mich <span style="border-bottom:2px solid var(--accent); color:var(--accent); display:inline-block; min-width:3em;">&nbsp;</span> das Wochenende.</p>
+      <input class="text-input" placeholder="digite a resposta" />
+      <button class="primary">Verificar</button>
+    </div>
+  </div>
+
+  <!-- ===================== FONÉTICA ===================== -->
+  <div class="screen" data-screen="fonetica">
+    <div class="crumb"><button data-goto="home"><i class="ti ti-arrow-left"></i> Início</button></div>
+    <p class="screen-title">Fonética</p>
+    <p class="screen-sub">Os pontos priorizados pra falante de português vêm com "prioridade alta" já em destaque.</p>
+    <div class="topic-grid" id="phon-grid"></div>
+  </div>
+
+  <!-- ===================== LEITURA (hub) ===================== -->
+  <div class="screen" data-screen="leitura">
+    <div class="crumb"><button data-goto="home"><i class="ti ti-arrow-left"></i> Início</button></div>
+    <p class="screen-title">Leitura</p>
+    <p class="screen-sub">Cada card é um texto — abrir um mostra o texto e a sequência inteira de exercícios ligados a ele, sem misturar com outros tópicos no meio.</p>
+    <div class="block-grid">
+      <button class="block-card" data-goto="leitura-bloco">
+        <span class="block-thumb"><i class="ti ti-news"></i></span>
+        <span class="block-info">
+          <span class="block-title">Die Artemis-Mission: Zurück zum Mond</span>
+          <span class="block-teaser">3 de 9 exercícios concluídos</span>
+        </span>
+        <span class="block-status progress">Em andamento</span>
+      </button>
+      <button class="block-card" data-goto="leitura-bloco">
+        <span class="block-thumb"><i class="ti ti-news"></i></span>
+        <span class="block-info">
+          <span class="block-title">Homeoffice als Regelfall?</span>
+          <span class="block-teaser">9 exercícios · ainda não iniciado</span>
+        </span>
+        <span class="block-status new">Novo</span>
+      </button>
+      <button class="block-card" data-goto="leitura-bloco">
+        <span class="block-thumb"><i class="ti ti-news"></i></span>
+        <span class="block-info">
+          <span class="block-title">Erneuerbare Energien in Deutschland</span>
+          <span class="block-teaser">9 de 9 exercícios concluídos</span>
+        </span>
+        <span class="block-status done">Concluído</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================== LEITURA (bloco aberto) ===================== -->
+  <div class="screen" data-screen="leitura-bloco">
+    <div class="crumb"><button data-goto="leitura"><i class="ti ti-arrow-left"></i> Leitura</button></div>
+    <p class="screen-title">Die Artemis-Mission: Zurück zum Mond</p>
+
+    <div class="reading-text">
+      <p class="title">Texto</p>
+      Die NASA hat mit der Artemis-Mission ein ehrgeiziges Ziel: Menschen sollen erneut den Mond betreten, zum ersten Mal seit über fünfzig Jahren. Anders als bei den Apollo-Missionen soll diesmal eine dauerhafte Präsenz aufgebaut werden — mit einer Raumstation im Mondorbit und, langfristig, einer Basis auf der Oberfläche…
+    </div>
+
+    <div class="block-progress-row">
+      <span class="block-dot done"></span>
+      <span class="block-dot done"></span>
+      <span class="block-dot done"></span>
+      <span class="block-dot current"></span>
+      <span class="block-dot"></span>
+      <span class="block-dot"></span>
+      <span class="block-dot"></span>
+      <span class="block-dot"></span>
+      <span class="block-dot"></span>
+      <span class="block-progress-label">exercício 4 de 9</span>
+    </div>
+
+    <div class="exercise-card">
+      <p class="template-label">Pergunta sobre o texto</p>
+      <p class="prompt">Wie viele Astronauten waren an Bord der Rakete?</p>
+      <input class="text-input" placeholder="digite a resposta" />
+      <button class="primary">Verificar</button>
+    </div>
+  </div>
+
+  <!-- ===================== VÍDEO ===================== -->
+  <div class="screen" data-screen="video">
+    <div class="crumb"><button data-goto="home"><i class="ti ti-arrow-left"></i> Início</button></div>
+    <p class="screen-title">Vídeo</p>
+    <p class="screen-sub">Mesmo padrão da Leitura — cada card é um clipe, abrir mostra o vídeo e as tarefas ligadas a ele (legendar, citar, ditado).</p>
+    <div class="block-grid">
+      <button class="block-card" data-goto="video">
+        <span class="block-thumb"><i class="ti ti-player-play"></i></span>
+        <span class="block-info">
+          <span class="block-title">Die Baustelle von morgen — DW Video-Thema</span>
+          <span class="block-teaser">3 tarefas: legendar, 2× citar</span>
+        </span>
+        <span class="block-status new">Novo</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================== PRÁTICA SEMANAL ===================== -->
+  <div class="screen" data-screen="semanal">
+    <div class="crumb"><button data-goto="home"><i class="ti ti-arrow-left"></i> Início</button></div>
+    <p class="screen-title">Prática semanal</p>
+    <div class="preview-note">
+      <i class="ti ti-info-circle"></i>
+      <span>Isso abre o Planejador que já existe hoje (8 cartões: Shadowing, Mineração de vídeo, Parágrafo de opinião, Áudio de opinião, Sessão com tutor, Speech/Debate) — não precisa redesenhar, já funciona bem. Só passa a ser alcançado a partir daqui em vez de um link solto no topo da tela.</span>
+    </div>
+  </div>
+
+  <!-- ===================== CONVERSAS ===================== -->
+  <div class="screen" data-screen="conversas">
+    <div class="crumb"><button data-goto="home"><i class="ti ti-arrow-left"></i> Início</button></div>
+    <p class="screen-title">Conversas</p>
+    <div class="preview-note">
+      <i class="ti ti-info-circle"></i>
+      <span>Isso abre a escada de exposição que já existe hoje (Jornalista, Concorrente, Interrogador técnico, Tribunal, Posição atribuída) + Speech rápido — esse componente já está bem resolvido, só muda de onde se chega até ele.</span>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+
+<script>
+const GRAM = [
+  ["1","Wortpositionen im Satz",78,12],
+  ["2","Konjunktiv II",45,9],
+  ["3","Passiv",60,10],
+  ["4","Präpositionen",30,14],
+  ["5","Verben, Adjektive, Nomen und ihre Ergänzungen",55,11],
+  ["6","Bildung der Zeiten",82,13],
+  ["7","Modalverben, lassen und (un)trennbare Verben",40,8],
+  ["8","Nomen, Artikel und Pronomen",65,15],
+  ["9","Adjektive",50,9],
+  ["10","Indirekte Rede",25,7],
+  ["11","Nebensätze",70,12],
+  ["12","Besondere Wörter und Wortverbindungen",35,6],
+  ["13","Umformung von Sätzen",58,10],
+  ["14","Und noch mehr Wissenswertes",20,5],
+  ["15","Wortbildung",42,8],
+  ["16","Zahlwörter",90,4],
+  ["17","Partikeln und Interjektionen",15,6],
+  ["18","Rechtschreibung und Zeichensetzung",48,9],
+];
+const PHON = [
+  ["1","Vokale",55,4],
+  ["2","Konsonanten",60,4],
+  ["3","Der Knacklaut",30,2],
+  ["4","Silbenstruktur",40,3],
+  ["5","Wortakzent",50,3],
+  ["6","Satzmelodie und Intonation",25,4],
+  ["7","Regionale Aussprachevarianten",0,2],
+  ["8","Pontos de atenção — falante de português",35,4],
+];
+
+function renderGrid(el, items) {
+  el.innerHTML = items.map(([num, name, pct, count]) => `
+    <button class="topic-card" data-goto="gram-topic" data-title="${name}">
+      <span class="topic-num">${num}</span>
+      <span class="topic-name">${name}</span>
+      <span class="topic-bar-track"><span class="topic-bar-fill" style="width:${pct}%"></span></span>
+      <span class="topic-count">${count} tópicos · ${pct}% dominado</span>
+    </button>
+  `).join("");
+}
+renderGrid(document.getElementById("gram-grid"), GRAM);
+renderGrid(document.getElementById("phon-grid"), PHON);
+
+function showScreen(name) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.dataset.screen === name));
+  document.getElementById("device").scrollIntoView({block:"nearest"});
+}
+
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-goto]");
+  if (!t) return;
+  if (t.dataset.title) {
+    document.getElementById("gram-topic-title").textContent = t.dataset.title;
+  }
+  showScreen(t.dataset.goto);
+});
+
+document.getElementById("format-filter").addEventListener("click", (e) => {
+  const chip = e.target.closest(".filter-chip");
+  if (!chip) return;
+  document.querySelectorAll("#format-filter .filter-chip").forEach(c => c.classList.remove("on"));
+  chip.classList.add("on");
+});
+
+const device = document.getElementById("device");
+document.getElementById("btn-desktop").addEventListener("click", (e) => {
+  device.className = "device desktop";
+  document.getElementById("btn-desktop").classList.add("active");
+  document.getElementById("btn-mobile").classList.remove("active");
+});
+document.getElementById("btn-mobile").addEventListener("click", (e) => {
+  device.className = "device mobile";
+  document.getElementById("btn-mobile").classList.add("active");
+  document.getElementById("btn-desktop").classList.remove("active");
+});
+</script>
+
+</body>
+</html>

@@ -8,7 +8,8 @@
 const main = document.getElementById("main");
 const progressEl = document.getElementById("progress");
 const bannerEl = document.getElementById("banner");
-const navToggle = document.getElementById("nav-toggle");
+const crumbEl = document.getElementById("crumb");
+const blockContextEl = document.getElementById("block-context");
 const changePasswordBtn = document.getElementById("change-password-btn");
 const logoutBtn = document.getElementById("logout-btn");
 
@@ -16,10 +17,28 @@ let session = [];
 let index = 0;
 let currentView = "session";
 let currentUser = null;
+// para onde "sessão concluída"/"nenhum exercício" deve voltar -- null
+// (default) volta pra Home; sessões escopadas (categoria, bloco de
+// leitura/vídeo) sobrescrevem antes de chamar showEmptyState.
+let sessionEmptyState = null;
+// chamado a cada advance() (inclusive no render inicial da sessao) --
+// usado pelo bloco de leitura/video pra atualizar os dots de progresso
+// sequencial sem duplicar logica dentro do advance() generico.
+let sessionProgressHook = null;
+
+// #block-context (fora de #main, igual ao crumb) guarda o texto/video +
+// dots de progresso de um bloco aberto -- persiste durante os varios
+// renderCurrent()/advance() da sequencia, que cada um substitui #main
+// inteiro sozinho. Toda tela que NAO e' um bloco chama isso pra garantir
+// que sobras de uma visita anterior a Leitura/Video nao fiquem penduradas.
+function clearBlockContext() {
+  blockContextEl.innerHTML = "";
+  sessionProgressHook = null;
+}
 
 // ---------- Fase 13 -- autenticacao (login obrigatorio, CLAUDE.md) ----------
 // Login/logout tradicional (nao perfis compartilhados) -- "trocar de
-// usuario" e' sair e entrar com a outra conta. nav-toggle/logout-btn
+// usuario" e' sair e entrar com a outra conta. logout-btn/change-password-btn
 // comecam `hidden` no HTML e so aparecem depois de autenticado.
 
 async function boot() {
@@ -30,16 +49,14 @@ async function boot() {
   }
   const data = await res.json();
   currentUser = data.user;
-  navToggle.hidden = false;
   changePasswordBtn.hidden = false;
   logoutBtn.hidden = false;
-  loadSession();
+  renderHome();
   loadBanner();
 }
 
 function renderAuthScreen(mode) {
   currentView = "auth";
-  navToggle.hidden = true;
   logoutBtn.hidden = true;
   progressEl.textContent = "";
   bannerEl.classList.add("banner-hidden");
@@ -88,12 +105,9 @@ function renderAuthScreen(mode) {
       return;
     }
     currentUser = data;
-    navToggle.hidden = false;
     changePasswordBtn.hidden = false;
     logoutBtn.hidden = false;
-    currentView = "session";
-    navToggle.textContent = "Planejador";
-    loadSession();
+    renderHome();
     loadBanner();
   });
 }
@@ -118,7 +132,8 @@ function renderChangePassword() {
   const back = () => {
     currentView = previousView;
     if (previousView === "planner") renderPlanner();
-    else loadSession();
+    else if (previousView === "session") loadSession();
+    else renderHome();
   };
 
   document.getElementById("cp-cancel").addEventListener("click", back);
@@ -154,17 +169,413 @@ logoutBtn.addEventListener("click", async () => {
   renderAuthScreen("login");
 });
 
+// ---------- "Home por categoria" (docs/12) ----------
+// Substitui a fila FSRS como ponto de entrada -- home e' um grid de cards
+// de grupo, "Revisao de hoje" vira uma opcao a mais (banner condicional),
+// nao o unico fluxo. Ver docs/12-mudanca-direcao-home-por-categoria.md.
+
+// crumb e' um elemento PERSISTENTE (index.html, fora de #main) em vez de
+// html embutido em cada tela -- assim nao precisa tocar nos ~20 renderX()
+// de exercicio (cada um substitui #main.innerHTML inteiro sozinho) so' pra
+// mostrar "voltar pra categoria/bloco" durante uma sessao escopada.
+function setCrumb(label, onBack) {
+  crumbEl.innerHTML = `<button class="link" id="crumb-back">← ${escapeHtml(label)}</button>`;
+  crumbEl.hidden = false;
+  document.getElementById("crumb-back").addEventListener("click", onBack);
+}
+
+function clearCrumb() {
+  crumbEl.hidden = true;
+  crumbEl.innerHTML = "";
+}
+
+async function renderHome() {
+  currentView = "home";
+  progressEl.textContent = "";
+  clearCrumb();
+  clearBlockContext();
+  main.innerHTML = `<p class="loading">Carregando…</p>`;
+
+  const res = await fetch("/api/home");
+  const overview = await res.json();
+
+  const reviewBanner =
+    overview.fsrs_due_count > 0
+      ? `<div class="review-banner">
+           <span>${overview.fsrs_due_count} ${overview.fsrs_due_count === 1 ? "item pronto" : "itens prontos"} pra revisão espaçada</span>
+           <button class="link" id="review-btn">Revisão de hoje →</button>
+         </div>`
+      : "";
+
+  const readingSub =
+    overview.reading.in_progress_count > 0
+      ? `${overview.reading.in_progress_count} em andamento`
+      : overview.reading.new_count > 0
+        ? `${overview.reading.new_count} novo${overview.reading.new_count === 1 ? "" : "s"}`
+        : "em dia";
+
+  main.innerHTML = `
+    <p class="greeting">O que você quer praticar hoje?</p>
+    ${reviewBanner}
+    <div class="group-grid">
+      <button class="group-card" id="group-grammar">
+        <span class="group-title">Gramática &amp; vocabulário</span>
+        <span class="group-sub">18 categorias · 100 tópicos</span>
+        <span class="group-meta${overview.grammar.due_count > 0 ? " due" : " neutral"}">${overview.grammar.due_count > 0 ? overview.grammar.due_count + " pendentes" : "em dia"}</span>
+      </button>
+      <button class="group-card" id="group-phonetics">
+        <span class="group-title">Fonética</span>
+        <span class="group-sub">8 categorias · 26 pontos</span>
+        <span class="group-meta${overview.phonetics.due_count > 0 ? " due" : " neutral"}">${overview.phonetics.due_count > 0 ? overview.phonetics.due_count + " pendentes" : "em dia"}</span>
+      </button>
+      <button class="group-card" id="group-reading">
+        <span class="group-title">Leitura</span>
+        <span class="group-sub">Textos com exercícios ligados</span>
+        <span class="group-meta neutral">${escapeHtml(readingSub)}</span>
+      </button>
+      <button class="group-card" id="group-video">
+        <span class="group-title">Vídeo</span>
+        <span class="group-sub">Clipes reais da DW</span>
+        <span class="group-meta neutral">${overview.video.available_count} disponíve${overview.video.available_count === 1 ? "l" : "is"}</span>
+      </button>
+      <button class="group-card" id="group-weekly">
+        <span class="group-title">Prática semanal</span>
+        <span class="group-sub">Shadowing, opinião, mineração de vídeo</span>
+        <span class="group-meta neutral">Planejador →</span>
+      </button>
+      <button class="group-card" id="group-conversations">
+        <span class="group-title">Conversas</span>
+        <span class="group-sub">Contestação hostil, speech rápido</span>
+        <span class="group-meta neutral">5 cenários</span>
+      </button>
+    </div>
+  `;
+
+  const reviewBtn = document.getElementById("review-btn");
+  if (reviewBtn) reviewBtn.addEventListener("click", loadSession);
+
+  document.getElementById("group-grammar").addEventListener("click", () => renderCategoryGrid("grammar"));
+  document.getElementById("group-phonetics").addEventListener("click", () => renderCategoryGrid("phonetics"));
+  document.getElementById("group-reading").addEventListener("click", renderReadingHub);
+  document.getElementById("group-video").addEventListener("click", renderVideoHub);
+  document.getElementById("group-weekly").addEventListener("click", renderPlanner);
+  document.getElementById("group-conversations").addEventListener("click", renderHostileLadder);
+}
+
+// placeholder temporario pros grupos cuja fatia ainda nao chegou --
+// removido conforme cada fatia (Leitura, Video) troca a chamada acima por
+// uma tela de verdade.
+function renderPlaceholder(title, message) {
+  currentView = "placeholder";
+  progressEl.textContent = "";
+  setCrumb("Início", renderHome);
+  clearBlockContext();
+  main.innerHTML = `
+    <p class="screen-title">${escapeHtml(title)}</p>
+    <p class="empty">${escapeHtml(message)}</p>
+  `;
+}
+
+// ---------- Gramática & Fonética: grid de categorias + sessão escopada ----------
+
+const GROUP_LABELS = { grammar: "Gramática & vocabulário", phonetics: "Fonética" };
+const GROUP_TEMPLATES = {
+  grammar: [
+    "GapFillGovernanceEngine",
+    "FillBlankEngine",
+    "WordBankGuessEngine",
+    "StructuralTransformEngine",
+    "RegisterReformulationEngine",
+    "UnscrambleEngine",
+    "ReadAloudEngine",
+    "SpokenGapFillEngine",
+  ],
+  phonetics: ["DictationEngine"],
+};
+
+async function renderCategoryGrid(group) {
+  currentView = "category-grid";
+  progressEl.textContent = "";
+  setCrumb("Início", renderHome);
+  clearBlockContext();
+  main.innerHTML = `<p class="loading">Carregando categorias…</p>`;
+
+  const res = await fetch(`/api/categories?group=${group}`);
+  const data = await res.json();
+  const categories = data.categories ?? [];
+
+  let selectedTemplate = null;
+
+  const filterChipsHtml = [`<button class="filter-chip on" data-template="">Todos os formatos</button>`]
+    .concat(
+      GROUP_TEMPLATES[group].map(
+        (t) => `<button class="filter-chip" data-template="${escapeHtml(t)}">${escapeHtml(templateLabel(t))}</button>`
+      )
+    )
+    .join("");
+
+  const gridHtml = categories.length
+    ? categories
+        .map(
+          (c) => `
+      <button class="topic-card" data-categoria="${escapeHtml(c.categoria)}">
+        <span class="topic-name">${escapeHtml(c.categoria)}</span>
+        <span class="topic-bar-track"><span class="topic-bar-fill" style="width:${c.mastery_pct}%"></span></span>
+        <span class="topic-count">${c.topic_count} tópico${c.topic_count === 1 ? "" : "s"} · ${c.mastery_pct}% dominado${c.due_count > 0 ? ` · ${c.due_count} pendente${c.due_count === 1 ? "" : "s"}` : ""}</span>
+      </button>`
+        )
+        .join("")
+    : `<p class="empty">Nenhuma categoria com conteúdo disponível ainda.</p>`;
+
+  main.innerHTML = `
+    <p class="screen-title">${escapeHtml(GROUP_LABELS[group])}</p>
+    <p class="screen-sub">Escolha uma categoria. Dentro dela os formatos se intercalam — ou filtre por um formato específico.</p>
+    <div class="filter-row" id="format-filter">${filterChipsHtml}</div>
+    <div class="topic-grid">${gridHtml}</div>
+  `;
+
+  document.getElementById("format-filter").addEventListener("click", (e) => {
+    const chip = e.target.closest(".filter-chip");
+    if (!chip) return;
+    document.querySelectorAll("#format-filter .filter-chip").forEach((c) => c.classList.remove("on"));
+    chip.classList.add("on");
+    selectedTemplate = chip.dataset.template || null;
+  });
+
+  main.querySelectorAll(".topic-card").forEach((card) => {
+    card.addEventListener("click", () => loadScopedSession(group, card.dataset.categoria, selectedTemplate));
+  });
+}
+
+async function loadScopedSession(group, categoria, template) {
+  currentView = "category-session";
+  setCrumb(categoria, () => renderCategoryGrid(group));
+  main.innerHTML = `<p class="loading">Carregando exercícios…</p>`;
+
+  const params = new URLSearchParams({ scope: group, categoria, limit: "10" });
+  if (template) params.set("template", template);
+
+  const res = await fetch(`/api/session?${params.toString()}`);
+  const data = await res.json();
+  session = data.exercises ?? [];
+  index = 0;
+  sessionEmptyState = {
+    backLabel: categoria,
+    onBack: () => renderCategoryGrid(group),
+  };
+  if (session.length === 0) {
+    showEmptyState(`Nenhum exercício disponível agora nessa categoria${template ? " com esse formato" : ""}.`);
+    return;
+  }
+  renderCurrent();
+}
+
+// ---------- Leitura: hub de blocos + bloco sequencial (docs/12) ----------
+// Sem interleave, sem FSRS -- e' a sequencia INTEIRA de exercicios do bloco,
+// em ordem, mostrada junto do texto que os originou. session/index (globais
+// ja existentes) + renderCurrent()/advance() sao 100% reaproveitados; a
+// unica coisa nova e' o texto+dots persistentes acima de #main
+// (blockContextEl) e o destino de saida (Leitura, nao Inicio).
+
+const BLOCK_STATUS_LABEL = { new: "Novo", in_progress: "Em andamento", done: "Concluído" };
+
+async function renderReadingHub() {
+  currentView = "reading-hub";
+  progressEl.textContent = "";
+  setCrumb("Início", renderHome);
+  clearBlockContext();
+  main.innerHTML = `<p class="loading">Carregando blocos de leitura…</p>`;
+
+  const res = await fetch("/api/reading-blocks");
+  const data = await res.json();
+  const blocks = data.blocks ?? [];
+
+  main.innerHTML = `
+    <p class="screen-title">Leitura</p>
+    <p class="screen-sub">Cada card é um texto — abrir mostra o texto e a sequência inteira de exercícios ligados a ele.</p>
+    <div class="block-grid">
+      ${
+        blocks.length
+          ? blocks
+              .map(
+                (b) => `
+        <button class="block-card" data-id="${b.id}">
+          <span class="block-info">
+            <span class="block-title">${escapeHtml(b.titulo)}</span>
+            <span class="block-teaser">${b.done} de ${b.total} exercícios concluídos</span>
+          </span>
+          <span class="block-status ${b.status}">${BLOCK_STATUS_LABEL[b.status]}</span>
+        </button>`
+              )
+              .join("")
+          : `<p class="empty">Nenhum bloco de leitura disponível ainda.</p>`
+      }
+    </div>
+  `;
+
+  main.querySelectorAll(".block-card").forEach((card) => {
+    card.addEventListener("click", () => renderReadingBlock(Number(card.dataset.id)));
+  });
+}
+
+function renderBlockProgressDots() {
+  const row = document.getElementById("block-progress-row");
+  if (!row) return;
+  const dots = session
+    .map((_, i) => {
+      const cls = i < index ? "done" : i === index ? "current" : "";
+      return `<span class="block-dot ${cls}"></span>`;
+    })
+    .join("");
+  row.innerHTML = `${dots}<span class="block-progress-label">exercício ${Math.min(index + 1, session.length)} de ${session.length}</span>`;
+}
+
+async function renderReadingBlock(id) {
+  currentView = "reading-block";
+  setCrumb("Leitura", renderReadingHub);
+  main.innerHTML = `<p class="loading">Carregando texto…</p>`;
+  blockContextEl.innerHTML = "";
+
+  const res = await fetch(`/api/reading-blocks/${id}`);
+  if (!res.ok) {
+    main.innerHTML = `<p class="error">Não foi possível carregar esse bloco.</p>`;
+    return;
+  }
+  const block = await res.json();
+
+  blockContextEl.innerHTML = `
+    <div class="reading-text">
+      <p class="title">${escapeHtml(block.titulo)}</p>
+      ${escapeHtml(block.texto_base)}
+    </div>
+    <div class="block-progress-row" id="block-progress-row"></div>
+  `;
+
+  session = block.items.map((item) => item.exercise);
+  index = 0;
+  sessionEmptyState = { backLabel: "Leitura", onBack: renderReadingHub };
+  sessionProgressHook = renderBlockProgressDots;
+
+  if (session.length === 0) {
+    blockContextEl.innerHTML = "";
+    showEmptyState("Esse bloco ainda não tem exercícios disponíveis.");
+    return;
+  }
+  renderBlockProgressDots();
+  renderCurrent();
+}
+
+// ---------- Vídeo: hub de clipes + grupo sequencial (docs/12) ----------
+// Mesmo padrao do bloco de Leitura, agrupando por video_clips.url em vez
+// de reading_block_id. O widget de video/audio em si (renderVideo/
+// renderDictation, ja existentes desde as Fases 6/9) ja se auto-contem
+// por exercicio -- cada tarefa pode ter uma janela start/end diferente do
+// mesmo video, entao nao ha um "video-wrap" persistente fora de #main
+// como o texto da Leitura; so os dots de progresso.
+
+async function renderVideoHub() {
+  currentView = "video-hub";
+  progressEl.textContent = "";
+  setCrumb("Início", renderHome);
+  clearBlockContext();
+  main.innerHTML = `<p class="loading">Carregando vídeos…</p>`;
+
+  const res = await fetch("/api/video-groups");
+  const data = await res.json();
+  const groups = data.groups ?? [];
+
+  const taskSummary = (labels) => {
+    const counts = new Map();
+    for (const l of labels) counts.set(l, (counts.get(l) ?? 0) + 1);
+    return [...counts.entries()].map(([label, n]) => (n > 1 ? `${n}× ${label}` : label)).join(", ");
+  };
+
+  main.innerHTML = `
+    <p class="screen-title">Vídeo</p>
+    <p class="screen-sub">Cada card é um clipe real da DW — abrir mostra o vídeo e as tarefas ligadas a ele, em sequência.</p>
+    <div class="block-grid">
+      ${
+        groups.length
+          ? groups
+              .map(
+                (g) => `
+        <button class="block-card" data-url="${escapeHtml(g.url)}">
+          <span class="block-info">
+            <span class="block-title">${g.total} tarefa${g.total === 1 ? "" : "s"}: ${escapeHtml(taskSummary(g.task_labels))}</span>
+            <span class="block-teaser">${g.done} de ${g.total} concluídas</span>
+          </span>
+          <span class="block-status ${g.status}">${BLOCK_STATUS_LABEL[g.status]}</span>
+        </button>`
+              )
+              .join("")
+          : `<p class="empty">Nenhum vídeo disponível ainda.</p>`
+      }
+    </div>
+  `;
+
+  main.querySelectorAll(".block-card").forEach((card) => {
+    card.addEventListener("click", () => renderVideoBlock(card.dataset.url));
+  });
+}
+
+async function renderVideoBlock(url) {
+  currentView = "video-block";
+  setCrumb("Vídeo", renderVideoHub);
+  clearBlockContext();
+  main.innerHTML = `<p class="loading">Carregando vídeo…</p>`;
+
+  const res = await fetch(`/api/video-groups?url=${encodeURIComponent(url)}`);
+  if (!res.ok) {
+    main.innerHTML = `<p class="error">Não foi possível carregar esse vídeo.</p>`;
+    return;
+  }
+  const group = await res.json();
+
+  blockContextEl.innerHTML = `<div class="block-progress-row" id="block-progress-row"></div>`;
+
+  session = group.items.map((item) => item.exercise);
+  index = 0;
+  sessionEmptyState = { backLabel: "Vídeo", onBack: renderVideoHub };
+  sessionProgressHook = renderBlockProgressDots;
+
+  if (session.length === 0) {
+    blockContextEl.innerHTML = "";
+    showEmptyState("Esse vídeo ainda não tem tarefas disponíveis.");
+    return;
+  }
+  renderBlockProgressDots();
+  renderCurrent();
+}
+
 async function loadSession() {
+  currentView = "session";
+  clearCrumb();
+  clearBlockContext();
+  sessionEmptyState = null; // fila FSRS sem escopo -- fim volta pra Home
   const res = await fetch("/api/session?limit=10");
   const data = await res.json();
   session = data.exercises ?? [];
   index = 0;
   if (session.length === 0) {
-    main.innerHTML = `<p class="empty">Nenhum exercício disponível agora. Volte mais tarde.</p>`;
-    progressEl.textContent = "";
+    showEmptyState("Nenhum exercício disponível agora. Volte mais tarde.");
     return;
   }
   renderCurrent();
+}
+
+// mensagem de fim/vazio com sempre um jeito de voltar -- por padrao pra
+// Home, mas sessionEmptyState (setado por loadScopedSession e futuramente
+// pelos blocos de leitura/video) troca o destino pra "voltar pra
+// categoria/bloco" em vez de largar o usuario direto na home de novo.
+function showEmptyState(message) {
+  const backLabel = sessionEmptyState?.backLabel ?? "Início";
+  const onBack = sessionEmptyState?.onBack ?? renderHome;
+  main.innerHTML = `
+    <p class="empty">${escapeHtml(message)}</p>
+    <button class="link" id="back-empty" style="align-self:center">← ${escapeHtml(backLabel)}</button>
+  `;
+  progressEl.textContent = "";
+  document.getElementById("back-empty").addEventListener("click", onBack);
 }
 
 // ---------- Fase 10 -- Grupo B: motor semanal (session_plans) ----------
@@ -194,7 +605,8 @@ async function loadBanner() {
 
 async function renderPlanner() {
   currentView = "planner";
-  navToggle.textContent = "Sessão";
+  setCrumb("Início", renderHome);
+  clearBlockContext();
   progressEl.textContent = "";
   main.innerHTML = `<p class="loading">Carregando planejador…</p>`;
 
@@ -355,7 +767,6 @@ const STRUCTURE_LABELS = { tese: "Tese", argumentos: "Argumentos", contra_argume
 
 async function renderEssay() {
   currentView = "essay";
-  navToggle.textContent = "Planejador";
   progressEl.textContent = "";
   main.innerHTML = `<p class="loading">Carregando…</p>`;
 
@@ -543,7 +954,6 @@ async function uploadToDrive(blob, filename) {
 
 async function renderRecordedOpinion() {
   currentView = "recorded-opinion";
-  navToggle.textContent = "Planejador";
   progressEl.textContent = "";
   main.innerHTML = `<p class="loading">Carregando…</p>`;
 
@@ -669,7 +1079,6 @@ function formatTimestamp(seconds) {
 
 async function renderVideoMining() {
   currentView = "video-mining";
-  navToggle.textContent = "Planejador";
   progressEl.textContent = "";
   main.innerHTML = `<p class="loading">Carregando…</p>`;
 
@@ -816,7 +1225,6 @@ function showMiningFeedback(result) {
 
 async function renderStructuredSpeech() {
   currentView = "structured-speech";
-  navToggle.textContent = "Planejador";
   progressEl.textContent = "";
   main.innerHTML = `<p class="loading">Carregando…</p>`;
 
@@ -1133,7 +1541,8 @@ function startVoiceChatSession(sessionId, openingMessage, opts) {
 
 async function renderHostileLadder() {
   currentView = "hostile-ladder";
-  navToggle.textContent = "Planejador";
+  setCrumb("Início", renderHome);
+  clearBlockContext();
   progressEl.textContent = "";
   main.innerHTML = `<p class="loading">Carregando…</p>`;
 
@@ -1197,7 +1606,6 @@ async function renderHostileLadder() {
 
 function renderHostileChat(scenario, sessionId, openingMessage, mode) {
   currentView = "hostile-chat";
-  navToggle.textContent = "Planejador";
   const title = scenario.group === "hostile" ? `Contestação hostil — ${escapeHtml(scenario.label)}` : escapeHtml(scenario.label);
   main.innerHTML = `
     <div class="card">
@@ -1221,7 +1629,6 @@ function renderHostileChat(scenario, sessionId, openingMessage, mode) {
 
 async function renderQuickOpinion() {
   currentView = "quick-opinion";
-  navToggle.textContent = "Planejador";
   progressEl.textContent = "";
   main.innerHTML = `<p class="loading">Gerando tópico…</p>`;
 
@@ -1312,16 +1719,6 @@ function showQuickOpinionResult(rubric) {
   document.getElementById("quick-again-btn").addEventListener("click", renderQuickOpinion);
   document.getElementById("back-after-quick").addEventListener("click", renderPlanner);
 }
-
-navToggle.addEventListener("click", () => {
-  if (currentView === "planner") {
-    currentView = "session";
-    navToggle.textContent = "Planejador";
-    loadSession();
-  } else {
-    renderPlanner();
-  }
-});
 
 const TEXT_INPUT_TEMPLATES = new Set([
   "GapFillGovernanceEngine",
@@ -1946,9 +2343,9 @@ function showFeedback(result) {
 
 function advance() {
   index += 1;
+  if (sessionProgressHook) sessionProgressHook();
   if (index >= session.length) {
-    main.innerHTML = `<p class="empty">Sessão concluída — ${session.length} exercícios. Volte quando quiser.</p>`;
-    progressEl.textContent = "";
+    showEmptyState(`Sessão concluída — ${session.length} exercícios. Volte quando quiser.`);
     return;
   }
   renderCurrent();
