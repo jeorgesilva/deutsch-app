@@ -4,14 +4,19 @@
 // mesmo template/modalidade duas vezes seguidas".
 import { ExerciseRow, SUPPORTED_TEMPLATES } from "./types";
 
-export async function composeSession(db: D1Database, limit: number): Promise<ExerciseRow[]> {
+export async function composeSession(db: D1Database, userId: number, limit: number): Promise<ExerciseRow[]> {
   const placeholders = SUPPORTED_TEMPLATES.map(() => "?").join(",");
   const now = new Date().toISOString();
 
   // vencidos primeiro (revisao FSRS), depois novos (nunca tentados) -- pega
   // mais que "limit" de cada balde pra sobrar material pra intercalar
   // (se so 1 template tivesse itens vencidos, intercalar exigiria pular
-  // pro balde de novos mesmo assim).
+  // pro balde de novos mesmo assim). progress agora e' por (usuario,
+  // exercicio) -- Fase 13: cada usuario tem seu proprio agendamento FSRS
+  // sobre o mesmo conteudo compartilhado, dai o AND p.user_id = ? no JOIN
+  // (nao um WHERE separado -- precisa ficar na condicao do JOIN pro LEFT
+  // JOIN de "novos" abaixo continuar funcionando como "nunca visto por
+  // ESTE usuario", nao "nunca visto por ninguem").
   const due = await db
     .prepare(
       `SELECT e.id, e.exercise_template_id, et.nome as template_nome, e.content_topic_id,
@@ -19,12 +24,12 @@ export async function composeSession(db: D1Database, limit: number): Promise<Exe
               vc.url as video_url, vc.start_seconds as video_start_seconds, vc.end_seconds as video_end_seconds
        FROM servable_exercises e
        JOIN exercise_templates et ON e.exercise_template_id = et.id
-       JOIN progress p ON p.exercise_id = e.id
+       JOIN progress p ON p.exercise_id = e.id AND p.user_id = ?
        LEFT JOIN video_clips vc ON e.video_clip_id = vc.id
        WHERE et.nome IN (${placeholders}) AND p.next_review_at <= ?
        ORDER BY p.next_review_at ASC LIMIT 50`
     )
-    .bind(...SUPPORTED_TEMPLATES, now)
+    .bind(userId, ...SUPPORTED_TEMPLATES, now)
     .all<ExerciseRow>();
 
   const novos = await db
@@ -34,12 +39,12 @@ export async function composeSession(db: D1Database, limit: number): Promise<Exe
               vc.url as video_url, vc.start_seconds as video_start_seconds, vc.end_seconds as video_end_seconds
        FROM servable_exercises e
        JOIN exercise_templates et ON e.exercise_template_id = et.id
-       LEFT JOIN progress p ON p.exercise_id = e.id
+       LEFT JOIN progress p ON p.exercise_id = e.id AND p.user_id = ?
        LEFT JOIN video_clips vc ON e.video_clip_id = vc.id
        WHERE et.nome IN (${placeholders}) AND p.id IS NULL
        ORDER BY RANDOM() LIMIT 50`
     )
-    .bind(...SUPPORTED_TEMPLATES)
+    .bind(userId, ...SUPPORTED_TEMPLATES)
     .all<ExerciseRow>();
 
   const pool = [...(due.results ?? []), ...(novos.results ?? [])];

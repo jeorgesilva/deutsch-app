@@ -1,0 +1,24 @@
+# Fase 14 (CLAUDE.md) -- servico fonetico (wav2vec2/faster-whisper/Piper)
+# rodando em Cloudflare Containers, publico via HTTP protegido por segredo
+# compartilhado (PHONETIC_SHARED_SECRET) -- ver src/index.ts. Worker normal
+# (nao Pages Functions -- Containers exige DO declarada com `main`, Pages
+# Functions so consome bindings, nunca declara DO propria).
+name = "deutsch-phonetic-service"
+compatibility_date = "2026-07-31"
+main = "src/index.ts"
+
+[[containers]]
+class_name = "PhoneticContainer"
+image = "./Dockerfile"
+# 1 vCPU / 6 GiB / 12 GB disco -- torch+transformers+faster-whisper+modelos
+# baked-in cabem com folga; ajustar se OOM em uso real.
+instance_type = "standard-2"
+max_instances = 1
+
+[[durable_objects.bindings]]
+name = "PHONETIC_CONTAINER"
+class_name = "PhoneticContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PhoneticContainer"]

@@ -6,9 +6,10 @@
 // (o video e' escolhido na hora, dentro da propria sessao de mineracao).
 import { lookupWiktionary } from "./wiktionary";
 
-export async function hasActiveVideoMiningPlan(db: D1Database): Promise<boolean> {
+export async function hasActiveVideoMiningPlan(db: D1Database, userId: number): Promise<boolean> {
   const plan = await db
-    .prepare(`SELECT id FROM session_plans WHERE scope = 'video_mining' AND completed_at IS NULL LIMIT 1`)
+    .prepare(`SELECT id FROM session_plans WHERE scope = 'video_mining' AND user_id = ? AND completed_at IS NULL LIMIT 1`)
+    .bind(userId)
     .first<{ id: number }>();
   return !!plan;
 }
@@ -26,6 +27,7 @@ export interface CandidateResult {
 
 export async function saveMiningSession(
   db: D1Database,
+  userId: number,
   videoUrl: string,
   notes: NoteInput[]
 ): Promise<{ notesSaved: number; candidates: CandidateResult[] }> {
@@ -58,10 +60,10 @@ export async function saveMiningSession(
 
     await db
       .prepare(
-        `INSERT INTO video_mining_notes (video_url, timestamp_seconds, note_text, is_candidate, lexicon_id)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO video_mining_notes (video_url, timestamp_seconds, note_text, is_candidate, lexicon_id, user_id)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .bind(videoUrl, note.timestamp_seconds, text, note.is_candidate ? 1 : 0, lexiconId)
+      .bind(videoUrl, note.timestamp_seconds, text, note.is_candidate ? 1 : 0, lexiconId, userId)
       .run();
   }
 

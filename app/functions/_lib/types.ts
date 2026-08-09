@@ -138,13 +138,14 @@ export interface ProgressRow {
 export interface Env {
   DB: D1Database;
   MEDIA: R2Bucket;
-  // URL do servico Python local de correcao fonetica (ver
-  // pipeline/src/deutsch_pipeline/phonetics/service.py) -- so existe/e'
-  // alcancavel enquanto a maquina do usuario estiver rodando o servico;
-  // funciona direto em dev local (`wrangler pages dev`, mesma maquina).
-  // Deploy remoto exigiria tunel publico (Cloudflare Tunnel) -- nao
-  // resolvido ainda, ver CLAUDE.md.
+  // Fase 14: URL publica do Worker de Cloudflare Containers que serve a
+  // correcao fonetica (services/phonetic-container/) -- nao depende mais
+  // da maquina do usuario estar ligada. PHONETIC_SHARED_SECRET autentica
+  // o Worker do Pages contra esse servico (ver services/phonetic-container/
+  // src/index.ts) -- sem isso, qualquer um que ache a URL consumiria
+  // inferencia (paga) a toa.
   PHONETIC_SERVICE_URL?: string;
+  PHONETIC_SHARED_SECRET?: string;
   // Fase 10 -- OpinionEssayEngine (docs/05 item 4): primeiro uso do
   // terceiro mecanismo de correcao do projeto (LLM com rubrica
   // estruturada). Chamado direto via fetch (Hugging Face Inference

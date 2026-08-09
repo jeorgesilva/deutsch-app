@@ -7,6 +7,7 @@
 // (Content-Type: audio/wav), nao JSON com base64 -- e' audio puro, sem
 // mais nada pra combinar na resposta (diferente de /roleplay-voice/message,
 // que precisa devolver texto + audio juntos).
+import { getCurrentUser, unauthorized } from "../../_lib/auth";
 import { synthesizeSpeech } from "../../_lib/phonetics";
 import { Env } from "../../_lib/types";
 
@@ -15,6 +16,9 @@ interface Body {
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const user = await getCurrentUser({ request, env });
+  if (!user) return unauthorized();
+
   const serviceUrl = env.PHONETIC_SERVICE_URL;
   if (!serviceUrl) {
     return Response.json({ error: "PHONETIC_SERVICE_URL não configurado" }, { status: 500 });
@@ -26,13 +30,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   try {
-    const { audio_base64 } = await synthesizeSpeech(serviceUrl, body.text);
+    const { audio_base64 } = await synthesizeSpeech(serviceUrl, env.PHONETIC_SHARED_SECRET, body.text);
     const bytes = Uint8Array.from(atob(audio_base64), (c) => c.charCodeAt(0));
     return new Response(bytes, { headers: { "Content-Type": "audio/wav" } });
   } catch (err) {
-    return Response.json(
-      { error: `serviço fonético local indisponível -- ele está rodando? (${(err as Error).message})` },
-      { status: 502 }
-    );
+    return Response.json({ error: `serviço fonético indisponível (${(err as Error).message})` }, { status: 502 });
   }
 };

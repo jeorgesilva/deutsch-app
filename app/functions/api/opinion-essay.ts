@@ -4,18 +4,22 @@
 // LLM (Hugging Face) e grava a tentativa -- mesmo padrao de showed_up=1 +
 // correction_json ja usado no schema (attempts), so que este e' o primeiro
 // engine a de fato preencher correction_json.
+import { getCurrentUser, unauthorized } from "../_lib/auth";
 import { gradeOpinionEssay } from "../_lib/llm";
 import { ensureEssayExercise, getActiveEssayPlan, latestEssayAttempt, parseTargetVocabulary, WORD_TARGET } from "../_lib/opinionEssay";
 import { Env } from "../_lib/types";
 
-export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
-  const plan = await getActiveEssayPlan(env.DB);
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const user = await getCurrentUser({ request, env });
+  if (!user) return unauthorized();
+
+  const plan = await getActiveEssayPlan(env.DB, user.id);
   if (!plan) {
     return Response.json({ has_theme: false });
   }
 
   const targetVocabulary = parseTargetVocabulary(plan.target_vocabulary);
-  const previous = plan.exercise_id ? await latestEssayAttempt(env.DB, plan.exercise_id) : null;
+  const previous = plan.exercise_id ? await latestEssayAttempt(env.DB, user.id, plan.exercise_id) : null;
 
   return Response.json({
     has_theme: true,
@@ -33,7 +37,10 @@ interface Body {
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const plan = await getActiveEssayPlan(env.DB);
+  const user = await getCurrentUser({ request, env });
+  if (!user) return unauthorized();
+
+  const plan = await getActiveEssayPlan(env.DB, user.id);
   if (!plan) {
     return Response.json({ error: "nenhum tema ativo -- preencha o tema no planejador primeiro" }, { status: 400 });
   }
@@ -53,8 +60,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return Response.json({ error: `correcao via LLM falhou: ${(err as Error).message}` }, { status: 502 });
   }
 
-  await env.DB.prepare(`INSERT INTO attempts (exercise_id, user_response, showed_up, correction_json) VALUES (?, ?, 1, ?)`)
-    .bind(exerciseId, body.text, JSON.stringify(rubric))
+  await env.DB.prepare(
+    `INSERT INTO attempts (exercise_id, user_response, showed_up, correction_json, user_id) VALUES (?, ?, 1, ?, ?)`
+  )
+    .bind(exerciseId, body.text, JSON.stringify(rubric), user.id)
     .run();
 
   return Response.json({ correction: rubric });

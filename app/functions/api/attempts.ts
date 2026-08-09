@@ -3,6 +3,7 @@
 // template), agenda proxima revisao via FSRS. body: {exercise_id,
 // user_response} pros 18 templates de texto, {exercise_id, audio_base64}
 // pra ReadAloudEngine/SpokenGapFillEngine.
+import { getCurrentUser, unauthorized } from "../_lib/auth";
 import { gradeAttempt } from "../_lib/grading";
 import { recordProgress } from "../_lib/progress";
 import { scoreReadAloud, scoreSpokenGapFill } from "../_lib/phonetics";
@@ -37,6 +38,9 @@ const PRONUNCIATION_OK_THRESHOLD = 0.5;
 const SHADOWING_TEMPLATES = new Set(["ShadowingEngine"]);
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const user = await getCurrentUser({ request, env });
+  if (!user) return unauthorized();
+
   const body = (await request.json()) as AttemptBody;
   if (!body?.exercise_id) {
     return Response.json({ error: "exercise_id e obrigatorio" }, { status: 400 });
@@ -60,11 +64,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (typeof body.audio_base64 !== "string") {
       return Response.json({ error: "audio_base64 e obrigatorio pra esse template" }, { status: 400 });
     }
-    return handlePhoneticAttempt(env, exercise, body.audio_base64);
+    return handlePhoneticAttempt(env, user.id, exercise, body.audio_base64);
   }
 
   if (SHADOWING_TEMPLATES.has(exercise.template_nome)) {
-    return handleShadowingAttempt(env, exercise.id);
+    return handleShadowingAttempt(env, user.id, exercise.id);
   }
 
   if (typeof body.user_response !== "string") {
@@ -74,12 +78,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const grade = gradeAttempt(exercise, body.user_response);
 
   await env.DB.prepare(
-    `INSERT INTO attempts (exercise_id, user_response, showed_up) VALUES (?, ?, 1)`
+    `INSERT INTO attempts (exercise_id, user_response, showed_up, user_id) VALUES (?, ?, 1, ?)`
   )
-    .bind(exercise.id, body.user_response)
+    .bind(exercise.id, body.user_response, user.id)
     .run();
 
-  const next = await recordProgress(env, exercise.id, grade.correct);
+  const next = await recordProgress(env, user.id, exercise.id, grade.correct);
 
   return Response.json({
     correct: grade.correct,
@@ -94,13 +98,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   });
 };
 
-async function handleShadowingAttempt(env: Env, exerciseId: number): Promise<Response> {
-  await env.DB.prepare(`INSERT INTO attempts (exercise_id, showed_up) VALUES (?, 1)`).bind(exerciseId).run();
-  const next = await recordProgress(env, exerciseId, true);
+async function handleShadowingAttempt(env: Env, userId: number, exerciseId: number): Promise<Response> {
+  await env.DB.prepare(`INSERT INTO attempts (exercise_id, showed_up, user_id) VALUES (?, 1, ?)`)
+    .bind(exerciseId, userId)
+    .run();
+  const next = await recordProgress(env, userId, exerciseId, true);
   return Response.json({ correct: true, next_review_at: next.next_review_at });
 }
 
-async function handlePhoneticAttempt(env: Env, exercise: ExerciseRow, audioBase64: string): Promise<Response> {
+async function handlePhoneticAttempt(env: Env, userId: number, exercise: ExerciseRow, audioBase64: string): Promise<Response> {
   const serviceUrl = env.PHONETIC_SERVICE_URL;
   if (!serviceUrl) {
     return Response.json({ error: "PHONETIC_SERVICE_URL nao configurado" }, { status: 500 });
@@ -113,13 +119,13 @@ async function handlePhoneticAttempt(env: Env, exercise: ExerciseRow, audioBase6
 
   try {
     if (exercise.template_nome === "ReadAloudEngine") {
-      const score = await scoreReadAloud(serviceUrl, exercise.prompt, audioBase64);
+      const score = await scoreReadAloud(serviceUrl, env.PHONETIC_SHARED_SECRET, exercise.prompt, audioBase64);
       correct = score.similarity >= PRONUNCIATION_OK_THRESHOLD;
       pronunciation = score;
     } else {
       const accepted: string[] = JSON.parse(exercise.accepted_answers);
       const sentenceFull = exercise.prompt.replace("___", accepted[0]);
-      const score = await scoreSpokenGapFill(serviceUrl, sentenceFull, accepted, audioBase64);
+      const score = await scoreSpokenGapFill(serviceUrl, env.PHONETIC_SHARED_SECRET, sentenceFull, accepted, audioBase64);
       userResponse = score.lexical.transcribed;
       correct = score.lexical.correct;
       lexical = score.lexical;
@@ -127,15 +133,15 @@ async function handlePhoneticAttempt(env: Env, exercise: ExerciseRow, audioBase6
     }
   } catch (err) {
     return Response.json(
-      { error: `servico fonetico local indisponivel -- ele esta rodando? (${(err as Error).message})` },
+      { error: `servico fonetico indisponivel (${(err as Error).message})` },
       { status: 502 }
     );
   }
 
   const attemptResult = await env.DB.prepare(
-    `INSERT INTO attempts (exercise_id, user_response, showed_up) VALUES (?, ?, 1)`
+    `INSERT INTO attempts (exercise_id, user_response, showed_up, user_id) VALUES (?, ?, 1, ?)`
   )
-    .bind(exercise.id, userResponse)
+    .bind(exercise.id, userResponse, userId)
     .run();
   const attemptId = attemptResult.meta.last_row_id;
 
@@ -146,7 +152,7 @@ async function handlePhoneticAttempt(env: Env, exercise: ExerciseRow, audioBase6
     .bind(attemptId, pronunciation.target_ipa, pronunciation.recognized_ipa, JSON.stringify(pronunciation.alignment), "wav2vec2-espeak")
     .run();
 
-  const next = await recordProgress(env, exercise.id, correct);
+  const next = await recordProgress(env, userId, exercise.id, correct);
 
   return Response.json({
     correct,

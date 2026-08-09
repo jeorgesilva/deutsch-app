@@ -4,9 +4,9 @@
 import { scheduleNext } from "./fsrs";
 import { Env, ProgressRow } from "./types";
 
-export async function recordProgress(env: Env, exerciseId: number, correct: boolean) {
-  const progress = await env.DB.prepare(`SELECT * FROM progress WHERE exercise_id = ?`)
-    .bind(exerciseId)
+export async function recordProgress(env: Env, userId: number, exerciseId: number, correct: boolean) {
+  const progress = await env.DB.prepare(`SELECT * FROM progress WHERE exercise_id = ? AND user_id = ?`)
+    .bind(exerciseId, userId)
     .first<ProgressRow>();
 
   const next = scheduleNext(progress, correct);
@@ -14,16 +14,16 @@ export async function recordProgress(env: Env, exerciseId: number, correct: bool
   if (progress) {
     await env.DB.prepare(
       `UPDATE progress SET stability = ?, difficulty = ?, last_review_at = ?, next_review_at = ?, reps = ?, lapses = ?
-       WHERE exercise_id = ?`
+       WHERE exercise_id = ? AND user_id = ?`
     )
-      .bind(next.stability, next.difficulty, next.last_review_at, next.next_review_at, next.reps, next.lapses, exerciseId)
+      .bind(next.stability, next.difficulty, next.last_review_at, next.next_review_at, next.reps, next.lapses, exerciseId, userId)
       .run();
   } else {
     await env.DB.prepare(
-      `INSERT INTO progress (exercise_id, stability, difficulty, last_review_at, next_review_at, reps, lapses)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO progress (exercise_id, user_id, stability, difficulty, last_review_at, next_review_at, reps, lapses)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(exerciseId, next.stability, next.difficulty, next.last_review_at, next.next_review_at, next.reps, next.lapses)
+      .bind(exerciseId, userId, next.stability, next.difficulty, next.last_review_at, next.next_review_at, next.reps, next.lapses)
       .run();
   }
 

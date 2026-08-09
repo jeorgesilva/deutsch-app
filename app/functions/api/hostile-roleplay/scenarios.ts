@@ -5,11 +5,15 @@
 // pre-exposicao e' cara, mas travar rigidamente seria contraproducente
 // pra exposicao graduada controlada pelo proprio usuario). times_completed
 // vem de sessoes ja FECHADAS (com avaliacao), so' informativo.
+import { getCurrentUser, unauthorized } from "../../_lib/auth";
 import { countClosedSessionsByPersona, GRUPO_D_PERSONAS } from "../../_lib/roleplay";
 import { Env } from "../../_lib/types";
 
-export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
-  const counts = await countClosedSessionsByPersona(env.DB);
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const user = await getCurrentUser({ request, env });
+  if (!user) return unauthorized();
+
+  const counts = await countClosedSessionsByPersona(env.DB, user.id);
   const scenarios = GRUPO_D_PERSONAS.map((p) => ({
     key: p.key,
     label: p.label,

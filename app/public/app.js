@@ -9,10 +9,97 @@ const main = document.getElementById("main");
 const progressEl = document.getElementById("progress");
 const bannerEl = document.getElementById("banner");
 const navToggle = document.getElementById("nav-toggle");
+const logoutBtn = document.getElementById("logout-btn");
 
 let session = [];
 let index = 0;
 let currentView = "session";
+let currentUser = null;
+
+// ---------- Fase 13 -- autenticacao (login obrigatorio, CLAUDE.md) ----------
+// Login/logout tradicional (nao perfis compartilhados) -- "trocar de
+// usuario" e' sair e entrar com a outra conta. nav-toggle/logout-btn
+// comecam `hidden` no HTML e so aparecem depois de autenticado.
+
+async function boot() {
+  const res = await fetch("/api/auth/me");
+  if (res.status === 401) {
+    renderAuthScreen("login");
+    return;
+  }
+  const data = await res.json();
+  currentUser = data.user;
+  navToggle.hidden = false;
+  logoutBtn.hidden = false;
+  loadSession();
+  loadBanner();
+}
+
+function renderAuthScreen(mode) {
+  currentView = "auth";
+  navToggle.hidden = true;
+  logoutBtn.hidden = true;
+  progressEl.textContent = "";
+  bannerEl.classList.add("banner-hidden");
+
+  const isRegister = mode === "register";
+  main.innerHTML = `
+    <div class="auth-card">
+      <h1>Deutsch</h1>
+      <form id="auth-form">
+        ${isRegister ? `<label>Nome<input class="text-input" id="auth-name" type="text" autocomplete="name" required /></label>` : ""}
+        <label>Email<input class="text-input" id="auth-email" type="email" autocomplete="email" required /></label>
+        <label>Senha<input class="text-input" id="auth-password" type="password" autocomplete="${isRegister ? "new-password" : "current-password"}" minlength="8" required /></label>
+        <p class="error" id="auth-error" hidden></p>
+        <button class="primary" type="submit">${isRegister ? "Criar conta" : "Entrar"}</button>
+      </form>
+      <button class="link" id="auth-toggle-mode" type="button">
+        ${isRegister ? "Já tem conta? Entrar" : "Não tem conta? Registre-se"}
+      </button>
+    </div>
+  `;
+
+  document.getElementById("auth-toggle-mode").addEventListener("click", () => {
+    renderAuthScreen(isRegister ? "login" : "register");
+  });
+
+  document.getElementById("auth-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById("auth-error");
+    errorEl.hidden = true;
+
+    const body = {
+      email: document.getElementById("auth-email").value,
+      password: document.getElementById("auth-password").value,
+    };
+    if (isRegister) body.display_name = document.getElementById("auth-name").value;
+
+    const res = await fetch(isRegister ? "/api/auth/register" : "/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errorEl.textContent = data.error ?? "algo deu errado";
+      errorEl.hidden = false;
+      return;
+    }
+    currentUser = data;
+    navToggle.hidden = false;
+    logoutBtn.hidden = false;
+    currentView = "session";
+    navToggle.textContent = "Planejador";
+    loadSession();
+    loadBanner();
+  });
+}
+
+logoutBtn.addEventListener("click", async () => {
+  await fetch("/api/auth/logout", { method: "POST" });
+  currentUser = null;
+  renderAuthScreen("login");
+});
 
 async function loadSession() {
   const res = await fetch("/api/session?limit=10");
@@ -1832,5 +1919,4 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-loadSession();
-loadBanner();
+boot();

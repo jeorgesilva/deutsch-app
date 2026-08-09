@@ -5,11 +5,15 @@
 // upload: recebe o drive_file_id ja pronto e grava a tentativa. Canal
 // separado de sempre -- so valida exposicao (showed_up=1), sem correcao de
 // idioma nesta fatia (mesmo mecanismo do ShadowingEngine).
+import { getCurrentUser, unauthorized } from "../_lib/auth";
 import { ensureAudioExercise, getActiveAudioPlan } from "../_lib/recordedOpinion";
 import { Env } from "../_lib/types";
 
-export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
-  const plan = await getActiveAudioPlan(env.DB);
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const user = await getCurrentUser({ request, env });
+  if (!user) return unauthorized();
+
+  const plan = await getActiveAudioPlan(env.DB, user.id);
   if (!plan) {
     return Response.json({ has_plan: false });
   }
@@ -21,7 +25,10 @@ interface Body {
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const plan = await getActiveAudioPlan(env.DB);
+  const user = await getCurrentUser({ request, env });
+  if (!user) return unauthorized();
+
+  const plan = await getActiveAudioPlan(env.DB, user.id);
   if (!plan) {
     return Response.json({ error: "nenhum plano ativo -- preencha quando/onde no planejador primeiro" }, { status: 400 });
   }
@@ -33,8 +40,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const exerciseId = await ensureAudioExercise(env.DB, plan);
 
-  await env.DB.prepare(`INSERT INTO attempts (exercise_id, audio_ref, showed_up) VALUES (?, ?, 1)`)
-    .bind(exerciseId, body.drive_file_id)
+  await env.DB.prepare(`INSERT INTO attempts (exercise_id, audio_ref, showed_up, user_id) VALUES (?, ?, 1, ?)`)
+    .bind(exerciseId, body.drive_file_id, user.id)
     .run();
 
   return Response.json({ ok: true });

@@ -9,9 +9,12 @@ import { SessionPlanRow } from "./types";
 
 export const RECORDED_OPINION_TEMPLATE_ID = 25;
 
-export async function getActiveAudioPlan(db: D1Database): Promise<SessionPlanRow | null> {
+export async function getActiveAudioPlan(db: D1Database, userId: number): Promise<SessionPlanRow | null> {
   return db
-    .prepare(`SELECT * FROM session_plans WHERE scope = 'opinion_audio' AND completed_at IS NULL ORDER BY id DESC LIMIT 1`)
+    .prepare(
+      `SELECT * FROM session_plans WHERE scope = 'opinion_audio' AND user_id = ? AND completed_at IS NULL ORDER BY id DESC LIMIT 1`
+    )
+    .bind(userId)
     .first<SessionPlanRow>();
 }
 

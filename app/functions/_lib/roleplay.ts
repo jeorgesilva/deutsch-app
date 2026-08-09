@@ -263,18 +263,23 @@ Regras:
 - "pontos_fortes": pontos fortes reais (nunca inventar se não houver nenhum genuíno) -- sempre em PORTUGUÊS. Isso inclui coragem/persistência sob pressão, não só qualidade linguística.
 - "cefr_estimate": estimativa honesta ("B1", "B2", "B2+", "C1", "C1+").`;
 
-export async function getActiveSpeechPlan(db: D1Database): Promise<SessionPlanRow | null> {
+export async function getActiveSpeechPlan(db: D1Database, userId: number): Promise<SessionPlanRow | null> {
   return db
-    .prepare(`SELECT * FROM session_plans WHERE scope = 'structured_speech' AND completed_at IS NULL ORDER BY id DESC LIMIT 1`)
+    .prepare(
+      `SELECT * FROM session_plans WHERE scope = 'structured_speech' AND user_id = ? AND completed_at IS NULL ORDER BY id DESC LIMIT 1`
+    )
+    .bind(userId)
     .first<SessionPlanRow>();
 }
 
 // contagem de sessoes ja FECHADAS por persona -- usado pela escada de
 // exposicao (docs/09, ExposureLadder) pra mostrar "ja praticado N vezes",
-// nunca pra travar acesso (a ordem e' sugerida, nunca bloqueada).
-export async function countClosedSessionsByPersona(db: D1Database): Promise<Record<string, number>> {
+// nunca pra travar acesso (a ordem e' sugerida, nunca bloqueada). Por
+// usuario -- Fase 13: a escada de cada um reflete so' a propria pratica.
+export async function countClosedSessionsByPersona(db: D1Database, userId: number): Promise<Record<string, number>> {
   const { results } = await db
-    .prepare(`SELECT persona, COUNT(*) as n FROM roleplay_sessions WHERE status = 'closed' GROUP BY persona`)
+    .prepare(`SELECT persona, COUNT(*) as n FROM roleplay_sessions WHERE status = 'closed' AND user_id = ? GROUP BY persona`)
+    .bind(userId)
     .all<{ persona: string; n: number }>();
   const counts: Record<string, number> = {};
   for (const row of results ?? []) counts[row.persona] = row.n;
@@ -283,14 +288,15 @@ export async function countClosedSessionsByPersona(db: D1Database): Promise<Reco
 
 export async function startSession(
   env: Env,
+  userId: number,
   engine: string,
   personaKey: string,
   topic: string | null
 ): Promise<{ sessionId: number; openingMessage: string }> {
   const persona = getPersona(personaKey);
 
-  const result = await env.DB.prepare(`INSERT INTO roleplay_sessions (engine, persona, topic) VALUES (?, ?, ?)`)
-    .bind(engine, personaKey, topic)
+  const result = await env.DB.prepare(`INSERT INTO roleplay_sessions (engine, persona, topic, user_id) VALUES (?, ?, ?, ?)`)
+    .bind(engine, personaKey, topic, userId)
     .run();
   const sessionId = result.meta.last_row_id as number;
 
@@ -315,9 +321,12 @@ export async function startSession(
   return { sessionId, openingMessage: opening };
 }
 
-export async function postMessage(env: Env, sessionId: number, userText: string): Promise<string> {
-  const session = await env.DB.prepare(`SELECT * FROM roleplay_sessions WHERE id = ?`)
-    .bind(sessionId)
+export async function postMessage(env: Env, userId: number, sessionId: number, userText: string): Promise<string> {
+  // "sessao nao encontrada" cobre tanto id inexistente quanto id de outro
+  // usuario -- nao revela qual dos dois casos e' pra nao vazar existencia
+  // de sessoes de terceiros.
+  const session = await env.DB.prepare(`SELECT * FROM roleplay_sessions WHERE id = ? AND user_id = ?`)
+    .bind(sessionId, userId)
     .first<RoleplaySessionRow>();
   if (!session) throw new Error("sessão não encontrada");
   if (session.status !== "active") throw new Error("sessão já encerrada");
@@ -347,9 +356,9 @@ export async function postMessage(env: Env, sessionId: number, userText: string)
   return reply;
 }
 
-export async function closeSession(env: Env, sessionId: number): Promise<unknown> {
-  const session = await env.DB.prepare(`SELECT * FROM roleplay_sessions WHERE id = ?`)
-    .bind(sessionId)
+export async function closeSession(env: Env, userId: number, sessionId: number): Promise<unknown> {
+  const session = await env.DB.prepare(`SELECT * FROM roleplay_sessions WHERE id = ? AND user_id = ?`)
+    .bind(sessionId, userId)
     .first<RoleplaySessionRow>();
   if (!session) throw new Error("sessão não encontrada");
   if (session.status === "closed" && session.evaluation_json) {
@@ -383,10 +392,14 @@ export async function closeSession(env: Env, sessionId: number): Promise<unknown
   return evaluation;
 }
 
-export async function getHistory(db: D1Database, sessionId: number): Promise<RoleplayMessageRow[]> {
+export async function getHistory(db: D1Database, userId: number, sessionId: number): Promise<RoleplayMessageRow[]> {
   const { results } = await db
-    .prepare(`SELECT * FROM roleplay_messages WHERE session_id = ? ORDER BY id`)
-    .bind(sessionId)
+    .prepare(
+      `SELECT m.* FROM roleplay_messages m
+       JOIN roleplay_sessions s ON s.id = m.session_id
+       WHERE m.session_id = ? AND s.user_id = ? ORDER BY m.id`
+    )
+    .bind(sessionId, userId)
     .all<RoleplayMessageRow>();
   return results ?? [];
 }

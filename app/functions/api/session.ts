@@ -1,14 +1,18 @@
 // GET /api/session?limit=10 -- Fase 9 (CLAUDE.md): sessao intercalada,
 // vencidos FSRS primeiro, depois novos. Le SEMPRE de servable_exercises
 // (nunca exercises direto) -- ponto estrutural unico de leitura, CLAUDE.md.
+import { getCurrentUser, unauthorized } from "../_lib/auth";
 import { composeSession } from "../_lib/session";
 import { AUDIO_FIRST_TEMPLATES, Env, TARGET_AUDIO_HIDDEN_TEMPLATES } from "../_lib/types";
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const user = await getCurrentUser({ request, env });
+  if (!user) return unauthorized();
+
   const url = new URL(request.url);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 10), 30);
 
-  const exercises = await composeSession(env.DB, limit);
+  const exercises = await composeSession(env.DB, user.id, limit);
 
   return Response.json({
     exercises: exercises.map((ex) => {

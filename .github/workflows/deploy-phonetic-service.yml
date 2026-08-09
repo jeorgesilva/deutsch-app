@@ -1,0 +1,36 @@
+# Fase 14 (CLAUDE.md) -- builda/sobe o Worker de Cloudflare Containers do
+# servico fonetico direto de um runner ubuntu-latest (amd64 nativo, sem
+# emulacao QEMU -- diferente de buildar num Mac arm64, que trava minutos no
+# download/carregamento dos modelos wav2vec2/faster-whisper sob emulacao).
+name: Deploy phonetic service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/phonetic-container/**"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/phonetic-container
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install
+
+      # docker COPY nao alcanca fora do build context -- vendoriza o
+      # minimo necessario de pipeline/ pra dentro deste diretorio antes de
+      # buildar (ver prepare-vendor.sh).
+      - run: ./prepare-vendor.sh
+
+      - run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

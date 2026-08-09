@@ -6,9 +6,10 @@
 // explicito no schema).
 import { GRUPO_B_SCOPES, SessionPlanRow } from "./types";
 
-export async function listActivePlans(db: D1Database): Promise<SessionPlanRow[]> {
+export async function listActivePlans(db: D1Database, userId: number): Promise<SessionPlanRow[]> {
   const { results } = await db
-    .prepare(`SELECT * FROM session_plans WHERE completed_at IS NULL ORDER BY id DESC`)
+    .prepare(`SELECT * FROM session_plans WHERE user_id = ? AND completed_at IS NULL ORDER BY id DESC`)
+    .bind(userId)
     .all<SessionPlanRow>();
   const active = results ?? [];
 
@@ -23,6 +24,7 @@ export async function listActivePlans(db: D1Database): Promise<SessionPlanRow[]>
 
 export async function upsertPlan(
   db: D1Database,
+  userId: number,
   scope: string,
   fields: {
     when_text: string | null;
@@ -35,8 +37,10 @@ export async function upsertPlan(
   }
 ): Promise<void> {
   const existing = await db
-    .prepare(`SELECT id, theme_text, target_vocabulary FROM session_plans WHERE scope = ? AND completed_at IS NULL ORDER BY id DESC LIMIT 1`)
-    .bind(scope)
+    .prepare(
+      `SELECT id, theme_text, target_vocabulary FROM session_plans WHERE scope = ? AND user_id = ? AND completed_at IS NULL ORDER BY id DESC LIMIT 1`
+    )
+    .bind(scope, userId)
     .first<{ id: number; theme_text: string | null; target_vocabulary: string | null }>();
 
   // seguro editar o tema/vocabulario a qualquer momento, mesmo depois do
@@ -58,21 +62,21 @@ export async function upsertPlan(
   } else {
     await db
       .prepare(
-        `INSERT INTO session_plans (scope, when_text, where_text, scheduled_for, theme_text, target_vocabulary)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO session_plans (scope, user_id, when_text, where_text, scheduled_for, theme_text, target_vocabulary)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .bind(scope, fields.when_text, fields.where_text, fields.scheduled_for, themeText, targetVocabulary)
+      .bind(scope, userId, fields.when_text, fields.where_text, fields.scheduled_for, themeText, targetVocabulary)
       .run();
   }
 }
 
-export async function completePlan(db: D1Database, scope: string): Promise<void> {
+export async function completePlan(db: D1Database, userId: number, scope: string): Promise<void> {
   await db
     .prepare(
       `UPDATE session_plans SET completed_at = ? WHERE id = (
-         SELECT id FROM session_plans WHERE scope = ? AND completed_at IS NULL ORDER BY id DESC LIMIT 1
+         SELECT id FROM session_plans WHERE scope = ? AND user_id = ? AND completed_at IS NULL ORDER BY id DESC LIMIT 1
        )`
     )
-    .bind(new Date().toISOString(), scope)
+    .bind(new Date().toISOString(), scope, userId)
     .run();
 }

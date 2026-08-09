@@ -1,0 +1,15 @@
+# Fase 14 -- so' o que run.py/service.py de fato importam (subconjunto de
+# pipeline/pyproject.toml -- nao precisa de spacy/language-tool-python/
+# ollama/gensim/py-openthesaurus/yt-dlp, que so' o pipeline de GERACAO usa).
+# torch fica de fora daqui de proposito -- instalado a parte no Dockerfile
+# via indice CPU-only (bem menor que o wheel CUDA que "pip install torch"
+# puxaria por padrao).
+flask
+waitress
+transformers
+phonemizer
+faster-whisper
+soundfile
+resampy
+editdistance
+piper-tts

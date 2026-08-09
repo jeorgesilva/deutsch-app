@@ -17,9 +17,12 @@ export function parseTargetVocabulary(raw: string | null): string[] {
     .filter(Boolean);
 }
 
-export async function getActiveEssayPlan(db: D1Database): Promise<SessionPlanRow | null> {
+export async function getActiveEssayPlan(db: D1Database, userId: number): Promise<SessionPlanRow | null> {
   const plan = await db
-    .prepare(`SELECT * FROM session_plans WHERE scope = 'opinion_essay' AND completed_at IS NULL ORDER BY id DESC LIMIT 1`)
+    .prepare(
+      `SELECT * FROM session_plans WHERE scope = 'opinion_essay' AND user_id = ? AND completed_at IS NULL ORDER BY id DESC LIMIT 1`
+    )
+    .bind(userId)
     .first<SessionPlanRow>();
   if (!plan || !plan.theme_text?.trim()) return null;
   return plan;
@@ -57,12 +60,12 @@ export interface EssayAttemptRow {
   attempted_at: string;
 }
 
-export async function latestEssayAttempt(db: D1Database, exerciseId: number): Promise<EssayAttemptRow | null> {
+export async function latestEssayAttempt(db: D1Database, userId: number, exerciseId: number): Promise<EssayAttemptRow | null> {
   return db
     .prepare(
       `SELECT user_response, correction_json, attempted_at FROM attempts
-       WHERE exercise_id = ? ORDER BY attempted_at DESC, id DESC LIMIT 1`
+       WHERE exercise_id = ? AND user_id = ? ORDER BY attempted_at DESC, id DESC LIMIT 1`
     )
-    .bind(exerciseId)
+    .bind(exerciseId, userId)
     .first<EssayAttemptRow>();
 }

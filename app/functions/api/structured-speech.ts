@@ -3,11 +3,15 @@
 // intention, mesmo padrao dos outros escopos do Grupo B) e devolve o tema
 // (session_plans.theme_text reaproveitado, mesmo padrao do roteiro do
 // RecordedOpinionEngine -- opcional, o moderador inventa um tema se vazio).
+import { getCurrentUser, unauthorized } from "../_lib/auth";
 import { getActiveSpeechPlan } from "../_lib/roleplay";
 import { Env } from "../_lib/types";
 
-export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
-  const plan = await getActiveSpeechPlan(env.DB);
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const user = await getCurrentUser({ request, env });
+  if (!user) return unauthorized();
+
+  const plan = await getActiveSpeechPlan(env.DB, user.id);
   if (!plan) {
     return Response.json({ has_plan: false });
   }
