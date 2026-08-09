@@ -1,0 +1,37 @@
+# docs/14/16 -- mesmo padrao de deploy-phonetic-service.yml: builda/sobe o
+# Worker de Cloudflare Containers do servico de geracao sob demanda direto
+# de um runner ubuntu-latest (amd64 nativo, sem emulacao QEMU -- build local
+# num Mac arm64 nao foi possivel verificar nesta sessao por falta de
+# daemon Docker disponivel, ver docs/16).
+name: Deploy generation service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/generation-container/**"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/generation-container
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install
+
+      # docker COPY nao alcanca fora do build context -- vendoriza o
+      # minimo necessario de pipeline/ pra dentro deste diretorio antes de
+      # buildar (ver prepare-vendor.sh).
+      - run: ./prepare-vendor.sh
+
+      - run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
