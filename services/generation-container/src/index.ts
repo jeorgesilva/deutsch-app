@@ -12,8 +12,15 @@
 // (cloudflare/containers egress allowlist), mesmo com enableInternet=true.
 // LanguageTool roda via subprocess Java 100% LOCAL ao container (nunca sai
 // pela rede), so o LLM usa isso.
-import { Container } from "@cloudflare/containers";
+import { Container, ContainerProxy } from "@cloudflare/containers";
 import type { DurableObject } from "cloudflare:workers";
+
+// obrigatorio pra allowedHosts funcionar de verdade (docs Cloudflare:
+// "Export ContainerProxy from your Worker entrypoint for outbound
+// interception to work" -- sem isso o egress nao e' de fato filtrado,
+// achado rodando contra o deploy real: ctx.exports.ContainerProxy is
+// undefined, 500 em toda chamada).
+export { ContainerProxy };
 
 export class GenerationContainer extends Container<Env> {
   defaultPort = 8080;
