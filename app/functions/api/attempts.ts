@@ -88,12 +88,28 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   return Response.json({
     correct: grade.correct,
     accepted_answers: grade.accepted_answers,
+    // Fatia C (redesenho de Video) -- diff palavra-a-palavra, so presente
+    // quando a correcao anexou um (gradeTextGapWithDiff, resposta errada).
+    // Campo aditivo: "correct" continua vindo do match exato, FSRS nao muda.
+    diff: grade.diff ?? null,
     // gabarito pos-tentativa (frase-fonte) -- so pros templates audio-primeiro
     // (DictationEngine, que chega com prompt=null na sessao). Pros outros,
     // "prompt" e' um esqueleto/gap/estrutura JSON, nao a resposta -- mostrar
     // ele como "gabarito" seria confuso (achado real testando o VowelInsertEngine:
     // mostrava a frase ainda com a lacuna, nao a palavra certa).
-    source_sentence: AUDIO_FIRST_TEMPLATES.has(exercise.template_nome) ? exercise.prompt : null,
+    // Fatia A (redesenho de Video) -- mesma excecao de session.ts, so pro
+    // VideoTaskEngine (prompt==="" em vez de so nome de template): "citar"
+    // (reconhecimento por parafrase, prompt preenchido) nao teve nada
+    // escondido em /api/session, entao nao ha nada pra revelar aqui -- o
+    // gabarito dele ja aparece via accepted_answers, mesmo mecanismo de
+    // qualquer chip-choice. DictationEngine/ShadowingEngine mantem o
+    // esconde-sempre/revela-depois original (guardam a frase-fonte real
+    // em `prompt`, nao vazio).
+    source_sentence:
+      AUDIO_FIRST_TEMPLATES.has(exercise.template_nome) &&
+      (exercise.template_nome !== "VideoTaskEngine" || exercise.prompt === "")
+        ? exercise.prompt
+        : null,
     next_review_at: next.next_review_at,
   });
 };

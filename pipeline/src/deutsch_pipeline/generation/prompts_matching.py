@@ -31,8 +31,12 @@ Responda SOMENTE com um array JSON válido, cada item {"termo": "...", "definica
 ou depois, sem markdown, sem explicação."""
 
 
-def build_user_prompt(texto_base: str, n_pairs: int) -> str:
-    return f"""Texto-base:
+def build_user_prompt(texto_base: str, n_pairs: int, label: str = "Texto-base") -> str:
+    # `label` -- Fatia B (redesenho de Video): reaproveitado sem mudanca de
+    # estrutura pra ancorar em transcricao de video em vez de reading_block
+    # (generate_video_comprehension.py passa label="Transcrição do vídeo");
+    # default identico ao original, comportamento de leitura inalterado.
+    return f"""{label}:
 {texto_base}
 
 Gere exatamente {n_pairs} pares termo→definição a partir de palavras/expressões deste texto, no formato \

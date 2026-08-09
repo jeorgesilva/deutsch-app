@@ -8,11 +8,21 @@ import { formatExerciseForClient } from "./session";
 import { ExerciseRow } from "./types";
 
 // Rotulo amigavel por tarefa -- nao existe uma coluna de "subtipo" no
-// schema; a distincao legendar/citar (VideoTaskEngine) vem de ter ou nao
-// uma janela propria (start_seconds NULL = clipe inteiro = legendar).
-function taskLabel(templateNome: string, startSeconds: number | null): string {
+// schema. Fatia A (redesenho de Video): "legendar" e "citar" AMBOS tem
+// janela propria agora (legendar virou 1 exercicio por sentenca, nao mais
+// 1 monolito sem start/end) -- a distincao passou a ser por CONTEUDO do
+// prompt (mesma sentinela usada em session.ts/attempts.ts): "" = producao
+// de texto (legendar), preenchido = reconhecimento por parafrase (citar).
+function taskLabel(templateNome: string, prompt: string): string {
   if (templateNome === "DictationEngine") return "Ditado";
-  if (templateNome === "VideoTaskEngine") return startSeconds == null ? "Legendar" : "Citar";
+  if (templateNome === "VideoTaskEngine") return prompt === "" ? "Legendar" : "Citar";
+  // Fatia B -- engines de compreensao reaproveitados do bloco de leitura
+  // (generate_video_comprehension.py), ancorados no video_clip PAI.
+  // PredictThenVerifyEngine ficou de fora (achado real: vaza transcricao
+  // como texto, ver comentario em generate_video_comprehension.py).
+  if (templateNome === "MatchingEngine") return "Associar";
+  if (templateNome === "TrueFalseEngine") return "Verdadeiro/Falso";
+  if (templateNome === "ComprehensionQAEngine") return "Pergunta";
   return templateNome;
 }
 
@@ -20,7 +30,7 @@ interface RawRow {
   url: string;
   exercise_id: number;
   template_nome: string;
-  start_seconds: number | null;
+  prompt: string;
   attempted_count: number;
 }
 
@@ -35,12 +45,12 @@ export interface VideoGroupSummary {
 async function fetchGroupedRows(db: D1Database, userId: number): Promise<RawRow[]> {
   const rows = await db
     .prepare(
-      `SELECT vc.url as url, e.id as exercise_id, et.nome as template_nome, vc.start_seconds as start_seconds,
+      `SELECT vc.url as url, e.id as exercise_id, et.nome as template_nome, e.prompt as prompt,
               (SELECT COUNT(*) FROM attempts a WHERE a.exercise_id = e.id AND a.user_id = ?) as attempted_count
        FROM video_clips vc
        JOIN servable_exercises e ON e.video_clip_id = vc.id
        JOIN exercise_templates et ON et.id = e.exercise_template_id
-       ORDER BY vc.url ASC, (vc.start_seconds IS NULL) DESC, vc.start_seconds ASC`
+       ORDER BY vc.url ASC, (vc.start_seconds IS NULL) DESC, vc.start_seconds ASC, e.id ASC`
     )
     .bind(userId)
     .all<RawRow>();
@@ -64,7 +74,7 @@ export async function listVideoGroups(db: D1Database, userId: number): Promise<V
       total,
       done,
       status: done === 0 ? "new" : done < total ? "in_progress" : "done",
-      task_labels: groupRows.map((r) => taskLabel(r.template_nome, r.start_seconds)),
+      task_labels: groupRows.map((r) => taskLabel(r.template_nome, r.prompt)),
     };
   });
 }
@@ -85,7 +95,7 @@ export async function getVideoGroupDetail(db: D1Database, userId: number, url: s
        JOIN servable_exercises e ON e.video_clip_id = vc.id
        JOIN exercise_templates et ON et.id = e.exercise_template_id
        WHERE vc.url = ?
-       ORDER BY (vc.start_seconds IS NULL) DESC, vc.start_seconds ASC`
+       ORDER BY (vc.start_seconds IS NULL) DESC, vc.start_seconds ASC, e.id ASC`
     )
     .bind(userId, url)
     .all<ExerciseRow & { attempted_count: number }>();

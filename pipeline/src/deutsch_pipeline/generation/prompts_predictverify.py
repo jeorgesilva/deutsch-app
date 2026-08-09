@@ -24,8 +24,9 @@ Para cada item gere:
 Responda SOMENTE com um array JSON válido, sem texto antes ou depois, sem markdown, sem explicação."""
 
 
-def build_user_prompt(texto_base: str, n_items: int) -> str:
-    return f"""Texto-base:
+def build_user_prompt(texto_base: str, n_items: int, label: str = "Texto-base") -> str:
+    # `label` -- Fatia B (redesenho de Video), mesmo padrao de prompts_matching.py.
+    return f"""{label}:
 {texto_base}
 
 Gere exatamente {n_items} pontos de previsão distintos (cortes em posições diferentes do texto), no formato \

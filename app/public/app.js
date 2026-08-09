@@ -1828,9 +1828,19 @@ function renderChipChoice(ex) {
   const data = JSON.parse(ex.prompt);
   const context = data.prompt_gapped ?? data.trecho_gapped ?? data.trecho_inicial;
   const options = data.word_bank ?? data.opcoes;
+  // Fatia A (redesenho de Video) -- "citar" (VideoTaskEngine, reconhecimento
+  // por parafrase) reaproveita este mesmo componente, so' com um video em
+  // cima do prompt. ex.video_url so vem preenchido nesse caso -- os outros
+  // chamadores (WordBankGuessEngine/PredictThenVerifyEngine) nunca tem
+  // video_url, entao ficam sem mudanca nenhuma.
+  const videoHtml = ex.video_url
+    ? `<div class="video-wrap"><iframe src="${youtubeEmbedUrl(ex)}" title="vídeo"
+          frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div>`
+    : "";
   main.innerHTML = `
     <div class="card">
       <span class="template-label">${templateLabel(ex.template)}</span>
+      ${videoHtml}
       <p class="prompt">${escapeHtml(context)}</p>
       <div class="chips" id="options"></div>
       <div id="feedback"></div>
@@ -2087,9 +2097,22 @@ function youtubeEmbedUrl(ex) {
 }
 
 function renderVideo(ex) {
-  // audio-primeiro (AUDIO_FIRST_TEMPLATES): transcricao nunca aparece como
-  // texto pra ler antes da tentativa, so como gabarito pos-tentativa --
-  // mesma regra do DictationEngine, so que a fonte e' o video em si.
+  // Fatia A (redesenho de Video) -- VideoTaskEngine hoje cobre 2 subtipos
+  // sob o mesmo template: "legendar" (producao de texto, ex.prompt chega
+  // null da sessao -- audio-primeiro, transcricao so como gabarito pos-
+  // tentativa) e "citar" (reconhecimento por parafrase, ex.prompt chega
+  // preenchido com {trecho_gapped, opcoes} -- a parafrase E' o proprio
+  // exercicio, tem que aparecer antes). Delega pro mesmo componente de
+  // chips ja usado por WordBankGuessEngine/PredictThenVerifyEngine, sem
+  // duplicar logica de UI.
+  if (ex.prompt) {
+    renderChipChoice(ex);
+    return;
+  }
+  // legendar -- audio-primeiro (AUDIO_FIRST_TEMPLATES): transcricao nunca
+  // aparece como texto pra ler antes da tentativa, so como gabarito pos-
+  // tentativa -- mesma regra do DictationEngine, so que a fonte e' o video
+  // em si.
   main.innerHTML = `
     <div class="card">
       <span class="template-label">${templateLabel(ex.template)}</span>
@@ -2259,7 +2282,12 @@ async function submitPhoneticAttempt(ex, audioBase64) {
   showPhoneticFeedback(result);
 }
 
-function phoneDiffHtml(alignment) {
+// Generico o bastante pra qualquer diff de token (op/target/recognized) --
+// usado tanto pelo diff fonetico (fonemas) quanto pelo diff de texto da
+// Fatia C (palavras, DictationEngine/VideoTaskEngine). Nome/classes CSS
+// ("phone.*") sao historicos do uso fonetico original, mas a semantica
+// (ok/diff/miss/extra) e' generica -- nao vale o churn de renomear o CSS.
+function wordDiffHtml(alignment) {
   return alignment
     .map((block) => {
       if (block.op === "equal") return `<span class="phone ok">${escapeHtml(block.target.join(" "))}</span>`;
@@ -2290,7 +2318,7 @@ function showPhoneticFeedback(result) {
     ${lexicalHtml}
     <div class="feedback ${pronunciationOk ? "correct" : "incorrect"}">
       Pronúncia — similaridade: ${Math.round(pron.similarity * 100)}%
-      <div class="phone-diff">${phoneDiffHtml(pron.alignment)}</div>
+      <div class="phone-diff">${wordDiffHtml(pron.alignment)}</div>
     </div>
     ${result.target_audio_url ? `<audio src="${result.target_audio_url}" controls></audio>` : ""}
     <button class="link" id="next">Continuar →</button>
@@ -2331,11 +2359,19 @@ function formatAnswerForDisplay(result) {
 function showFeedback(result) {
   const feedbackEl = document.getElementById("feedback");
   const correctText = formatAnswerForDisplay(result);
+  // Fatia C -- diff palavra-a-palavra, so quando a correcao anexou um
+  // (resposta longa errada, ex. Dictation/VideoTask); aditivo ao texto
+  // padrao "a resposta certa era X", nao substitui.
+  const diffHtml =
+    !result.correct && Array.isArray(result.diff) && result.diff.length
+      ? `<div class="phone-diff">${wordDiffHtml(result.diff)}</div>`
+      : "";
   feedbackEl.innerHTML = `
     <div class="feedback ${result.correct ? "correct" : "incorrect"}">
       ${result.correct ? "Certo!" : "Quase — a resposta certa era:"}
       ${result.correct ? "" : `<span class="answer">${escapeHtml(correctText)}</span>`}
     </div>
+    ${diffHtml}
     <button class="link" id="next">Continuar →</button>
   `;
   document.getElementById("next").addEventListener("click", advance);

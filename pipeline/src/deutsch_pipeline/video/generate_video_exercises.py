@@ -1,24 +1,39 @@
-"""Fase 6 (CLAUDE.md, docs/07) -- gera exercícios em cima de um `video_clips`
-já ingerido (`ingest_video_clip.py`, transcrição real via yt-dlp): as duas
-variantes determinísticas de `VideoTaskEngine` (legendar = docs/05 item 12,
-citar = item 44) e a variante autêntica do `DictationEngine` (item 28,
-`source_type='authentic_video'` em vez de `'tts'`).
+"""Fase 6 (CLAUDE.md, docs/07), redesenhado na Fatia A do redesenho
+pedagógico de Vídeo -- gera exercícios em cima de um `video_clips` já
+ingerido (`ingest_video_clip.py`, transcrição real via yt-dlp):
 
-Não chama NENHUM LLM -- a transcrição já é real e ancorada (é o ponto do
-docs/07: melhor que gerar texto do zero, só extrai o que já existe). Único
-trabalho aqui é RECORTAR: "legendar" usa o clipe inteiro já ingerido; "citar"
-e a variante do DictationEngine recortam segmentos curtos em clipes-janela
-próprios (cada um com seu `start_seconds`/`end_seconds`), porque a interação
-precisa saber ONDE no vídeo pular pra aquele trecho especificamente.
+- "legendar" (VideoTaskEngine, produção de texto, docs/05 item 12): antes
+  gerava 1 exercício-monólito com a transcrição inteira do clipe (achado
+  pedagógico real: excede memória de trabalho, viola o princípio de unidade
+  <2min do projeto). Agora quebra o clipe em SENTENÇAS via
+  `vtt_parser.merge_into_sentences` e gera 1 exercício por sentença, cada
+  um com seu próprio sub-clipe -- mesma granularidade de "citar", cobertura
+  total do vídeo em sequência. Não chama LLM -- é derivação mecânica da
+  transcrição real, mesmo espírito de antes.
+- "citar" (VideoTaskEngine, docs/05 item 44): deixou de ser produção de
+  texto (idêntico a "dictation", mesmo construto sob nome diferente -- achado
+  pedagógico real) e virou RECONHECIMENTO por paráfrase: dado um resumo em
+  alemão mais simples (1 chamada de LLM por trecho, `prompts_video_citar.py`,
+  gate mecânico de fundamentação próprio), o usuário aponta qual trecho do
+  vídeo corresponde. Distratores são sempre trechos REAIS do mesmo vídeo,
+  nunca inventados.
+- "dictation" (variante autêntica do `DictationEngine`, item 28,
+  `source_type='authentic_video'`): sem mudança -- continua bottom-up puro,
+  ouvir e digitar de volta.
 
 Uso:
     python -m deutsch_pipeline.video.generate_video_exercises --video-clip-id 1 --engine legendar
-    python -m deutsch_pipeline.video.generate_video_exercises --video-clip-id 1 --engine citar --n-items 3
+    python -m deutsch_pipeline.video.generate_video_exercises --video-clip-id 1 --engine citar --n-items 3 --model hf:deepseek-ai/DeepSeek-V3
     python -m deutsch_pipeline.video.generate_video_exercises --video-clip-id 1 --engine dictation --n-items 3
 """
 import argparse
+import json
+import random
 
+from . import prompts_video_citar
 from .ingest_video_clip import write_video_clip
+from .vtt_parser import merge_into_sentences
+from ..generation import llm_client
 from ..ingest.write_exercises import build_insert, execute_d1, query_d1
 
 MIN_QUOTE_LEN = 25
@@ -84,11 +99,21 @@ def write_exercise(prompt, accepted_answers, exercise_template_id, video_clip_id
     return exercise_id
 
 
+def _write_sub_clip(clip: dict, start_seconds: float, end_seconds: float) -> int:
+    return write_video_clip(
+        video_id=clip["url"].rsplit("=", 1)[-1], url=clip["url"], fonte=clip["fonte"],
+        channel_or_playlist=clip["channel_or_playlist"], caption_quality=clip["caption_quality"],
+        content_topic_id=clip["content_topic_id"],
+        start_seconds=int(start_seconds), end_seconds=int(end_seconds) + 1,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video-clip-id", type=int, required=True)
     parser.add_argument("--engine", required=True, choices=["legendar", "citar", "dictation"])
     parser.add_argument("--n-items", type=int, default=3, help="so pra citar/dictation")
+    parser.add_argument("--model", default=None, help="obrigatorio pro engine citar (unico que chama LLM)")
     args = parser.parse_args()
 
     clip = load_clip(args.video_clip_id)
@@ -99,30 +124,66 @@ def main():
     generated_by = f"yt-dlp:{clip['caption_quality']}"
 
     if args.engine == "legendar":
-        full_text = " ".join(s["text"] for s in segments)
-        exercise_id = write_exercise(
-            None, [full_text], templates["VideoTaskEngine"], args.video_clip_id,
-            generated_by, source_type="authentic_video",
-        )
-        print(f"  -> 1 exercicio (legendar, clipe inteiro), id={exercise_id}, "
-              f"{len(full_text.split())} palavras no gabarito")
+        sentences = merge_into_sentences(segments)
+        written = 0
+        for sent in sentences:
+            sub_clip_id = _write_sub_clip(clip, sent["start_seconds"], sent["end_seconds"])
+            write_exercise(
+                None, [sent["text"]], templates["VideoTaskEngine"], sub_clip_id,
+                generated_by, source_type="authentic_video",
+            )
+            written += 1
+        print(f"  -> {written} exercicios (legendar, 1 por sentenca via merge_into_sentences), "
+              f"cobertura total do clipe em sequencia")
         return
 
-    quotes = pick_quote_segments(segments, args.n_items, offset=ENGINE_OFFSETS.get(args.engine, 0))
-    template_id = templates["VideoTaskEngine"] if args.engine == "citar" else templates["DictationEngine"]
-    written = 0
-    for seg in quotes:
-        sub_clip_id = write_video_clip(
-            video_id=clip["url"].rsplit("=", 1)[-1], url=clip["url"], fonte=clip["fonte"],
-            channel_or_playlist=clip["channel_or_playlist"], caption_quality=clip["caption_quality"],
-            content_topic_id=clip["content_topic_id"],
-            start_seconds=int(seg["start_seconds"]), end_seconds=int(seg["end_seconds"]) + 1,
-        )
+    if args.engine == "dictation":
+        quotes = pick_quote_segments(segments, args.n_items, offset=ENGINE_OFFSETS["dictation"])
+        written = 0
+        for seg in quotes:
+            sub_clip_id = _write_sub_clip(clip, seg["start_seconds"], seg["end_seconds"])
+            write_exercise(
+                None, [seg["text"]], templates["DictationEngine"], sub_clip_id,
+                generated_by, source_type="authentic_video",
+            )
+            written += 1
+        print(f"  -> {written} exercicios (dictation), cada um com seu proprio video_clips (janela de tempo)")
+        return
+
+    # citar -- reconhecimento por parafrase (unico engine que chama LLM,
+    # ver prompts_video_citar.py). Distratores sao outros trechos REAIS do
+    # mesmo video (candidatos de tamanho medio, mesmo filtro de
+    # pick_quote_segments), nunca inventados.
+    if not args.model:
+        raise SystemExit("--model e' obrigatorio pro engine citar (unico que chama LLM)")
+    candidates = [s for s in segments if MIN_QUOTE_LEN <= len(s["text"]) <= MAX_QUOTE_LEN]
+    targets = pick_quote_segments(segments, args.n_items, offset=ENGINE_OFFSETS["citar"])
+    written, skipped = 0, 0
+    for target in targets:
+        distractor_pool = [c["text"] for c in candidates if c["text"] != target["text"]]
+        if len(distractor_pool) < 1:
+            print(f"  [pulado] sem trecho distrator disponivel pra '{target['text'][:40]}...'")
+            skipped += 1
+            continue
+        distractors = random.sample(distractor_pool, k=min(2, len(distractor_pool)))
+
+        user_prompt = prompts_video_citar.build_user_prompt(target["text"])
+        raw = llm_client.chat(args.model, prompts_video_citar.SYSTEM_PROMPT, user_prompt, temperature=0.7)
+        paraphrase = prompts_video_citar.extract_paraphrase(raw)
+        fields = prompts_video_citar.build_exercise_fields_citar(paraphrase, target["text"], distractors)
+
+        if not fields["prompt"]:
+            print(f"  [flagged] {fields['flag_detail']}")
+            skipped += 1
+            continue
+
+        sub_clip_id = _write_sub_clip(clip, target["start_seconds"], target["end_seconds"])
         write_exercise(
-            None, [seg["text"]], template_id, sub_clip_id, generated_by, source_type="authentic_video",
+            fields["prompt"], fields["accepted_answers"], templates["VideoTaskEngine"], sub_clip_id,
+            args.model, source_type="authentic_video",
         )
         written += 1
-    print(f"  -> {written} exercicios ({args.engine}), cada um com seu proprio video_clips (janela de tempo)")
+    print(f"  -> {written} exercicios (citar, reconhecimento por parafrase), {skipped} descartados pelo gate")
 
 
 if __name__ == "__main__":

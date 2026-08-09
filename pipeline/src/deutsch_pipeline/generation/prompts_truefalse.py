@@ -27,8 +27,9 @@ real (pra afirmações falsas, cite o trecho que mostra o dado CORRETO que foi t
 Responda SOMENTE com um array JSON válido, sem texto antes ou depois, sem markdown, sem explicação."""
 
 
-def build_user_prompt(texto_base: str, n_items: int) -> str:
-    return f"""Texto-base:
+def build_user_prompt(texto_base: str, n_items: int, label: str = "Texto-base") -> str:
+    # `label` -- Fatia B (redesenho de Video), mesmo padrao de prompts_matching.py.
+    return f"""{label}:
 {texto_base}
 
 Gere exatamente {n_items} afirmações (mistura de verdadeiras e falsas, nunca todas do mesmo tipo em \

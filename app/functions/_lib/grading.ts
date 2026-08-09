@@ -2,10 +2,12 @@
 // por engine -- GapFillGovernanceEngine e FillBlankEngine usam o MESMO
 // formato plano de string, entao a mesma funcao serve pras duas).
 import { ExerciseRow } from "./types";
+import { DiffBlock, wordDiff } from "./textDiff";
 
 export interface GradeResult {
   correct: boolean;
   accepted_answers: unknown;
+  diff?: DiffBlock[];
 }
 
 function normalize(s: string): string {
@@ -16,6 +18,32 @@ function gradeTextGap(userResponse: string, acceptedAnswersJson: string): GradeR
   const accepted: string[] = JSON.parse(acceptedAnswersJson);
   const correct = accepted.some((a) => normalize(a) === normalize(userResponse));
   return { correct, accepted_answers: accepted };
+}
+
+// Fatia C -- mesma comparacao exata de gradeTextGap (o criterio de
+// acerto/FSRS nao muda), mas anexa um diff palavra-a-palavra quando errado,
+// pra dar feedback granular em respostas longas (Dictation/VideoTask) em
+// vez de so um booleano. Reaproveita o padrao ja usado na correcao fonetica
+// (phone_diff/difflib.SequenceMatcher), agora generalizado pro Worker via
+// textDiff.ts. Contra a resposta aceita mais PARECIDA (menos blocos de
+// diferenca), nao so a primeira -- accepted_answers pode ter mais de uma
+// variante valida.
+function gradeTextGapWithDiff(userResponse: string, acceptedAnswersJson: string): GradeResult {
+  const accepted: string[] = JSON.parse(acceptedAnswersJson);
+  const correct = accepted.some((a) => normalize(a) === normalize(userResponse));
+  if (correct) return { correct, accepted_answers: accepted };
+
+  let bestDiff: DiffBlock[] | undefined;
+  let bestErrorCount = Infinity;
+  for (const a of accepted) {
+    const diff = wordDiff(a, userResponse);
+    const errorCount = diff.filter((b) => b.op !== "equal").length;
+    if (errorCount < bestErrorCount) {
+      bestErrorCount = errorCount;
+      bestDiff = diff;
+    }
+  }
+  return { correct, accepted_answers: accepted, diff: bestDiff };
 }
 
 function gradeWordBank(userResponse: string, acceptedAnswersJson: string): GradeResult {
@@ -103,10 +131,10 @@ export function gradeAttempt(exercise: ExerciseRow, userResponse: string): Grade
       // corretas -- ok pro v1, revisitar se incomodar no uso real).
       return gradeTextGap(userResponse, exercise.accepted_answers);
     case "DictationEngine":
-      // mesma logica -- accepted_answers = [frase-fonte inteira]. docs/08
-      // previa diff palavra-a-palavra com tolerancia; aqui e' comparacao
-      // exata pro "minimo", mesma ressalva do caso acima.
-      return gradeTextGap(userResponse, exercise.accepted_answers);
+      // accepted_answers = [frase-fonte inteira]. docs/08 previa diff
+      // palavra-a-palavra -- Fatia C (redesenho de Video) adiciona isso via
+      // gradeTextGapWithDiff (criterio de acerto/FSRS continua exato).
+      return gradeTextGapWithDiff(userResponse, exercise.accepted_answers);
     case "LetterAnagramEngine":
     case "ParagraphOrderEngine":
     case "BinaryChoiceEngine":
@@ -125,9 +153,16 @@ export function gradeAttempt(exercise: ExerciseRow, userResponse: string): Grade
     case "MatchingEngine":
       return gradeMatching(userResponse, exercise.accepted_answers);
     case "VideoTaskEngine":
-      // mesmo formato plano de string do gap-fill (accepted_answers = [trecho
-      // certo]) -- so muda a apresentacao (iframe do YouTube em vez de texto).
-      return gradeTextGap(userResponse, exercise.accepted_answers);
+      // mesmo formato plano de string do gap-fill (accepted_answers =
+      // [trecho certo]) -- Fatia A (redesenho de Video): sob o MESMO
+      // template hoje coexistem "legendar" (producao de texto, prompt=""
+      // -- mesmo diff granular do DictationEngine, Fatia C) e "citar"
+      // (reconhecimento por parafrase, prompt preenchido com a parafrase +
+      // opcoes -- resposta e' uma opcao inteira escolhida, diff palavra-a-
+      // palavra nao faz sentido pra escolha discreta).
+      return exercise.prompt === ""
+        ? gradeTextGapWithDiff(userResponse, exercise.accepted_answers)
+        : gradeTextGap(userResponse, exercise.accepted_answers);
     default:
       throw new Error(`Template nao suportado pra correcao: ${exercise.template_nome}`);
   }

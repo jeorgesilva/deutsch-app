@@ -85,7 +85,19 @@ export async function composeSession(
 // reimplementaria a mesma regra de "nunca mostrar a frase-fonte antes da
 // tentativa").
 export function formatExerciseForClient(ex: ExerciseRow) {
-  const audioFirst = AUDIO_FIRST_TEMPLATES.has(ex.template_nome);
+  // Fatia A (redesenho de Video) -- "esconder o prompt" pro VideoTaskEngine
+  // especificamente agora depende do CONTEUDO (prompt vazio = nada pra
+  // mostrar antes da tentativa), nao so do NOME do template. Antes, todo
+  // VideoTaskEngine escondia o prompt incondicionalmente; agora "citar"
+  // (reconhecimento por parafrase) usa o MESMO template mas com prompt
+  // preenchido de proposito (a parafrase e' o proprio exercicio, precisa
+  // aparecer antes -- so a transcricao/video-fonte continua proibida de
+  // aparecer como leitura previa). NAO generalizar pra DictationEngine/
+  // ShadowingEngine -- esses guardam a frase-fonte REAL em `prompt` (nao
+  // vazio) e dependem do esconde-sempre/revela-depois original.
+  const audioFirst =
+    AUDIO_FIRST_TEMPLATES.has(ex.template_nome) &&
+    (ex.template_nome !== "VideoTaskEngine" || ex.prompt === "");
   const audioHidden = TARGET_AUDIO_HIDDEN_TEMPLATES.has(ex.template_nome);
   return {
     id: ex.id,
