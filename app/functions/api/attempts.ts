@@ -4,6 +4,7 @@
 // user_response} pros 18 templates de texto, {exercise_id, audio_base64}
 // pra ReadAloudEngine/SpokenGapFillEngine.
 import { getCurrentUser, unauthorized } from "../_lib/auth";
+import { explainAttempt } from "../_lib/explain";
 import { gradeAttempt } from "../_lib/grading";
 import { recordProgress } from "../_lib/progress";
 import { scoreReadAloud, scoreSpokenGapFill } from "../_lib/phonetics";
@@ -77,13 +78,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const grade = gradeAttempt(exercise, body.user_response);
 
-  await env.DB.prepare(
-    `INSERT INTO attempts (exercise_id, user_response, showed_up, user_id) VALUES (?, ?, 1, ?)`
-  )
-    .bind(exercise.id, body.user_response, user.id)
-    .run();
-
-  const next = await recordProgress(env, user.id, exercise.id, grade.correct);
+  // Insercao/FSRS e a explicacao em linguagem natural (chamada LLM externa,
+  // _lib/explain.ts) rodam em paralelo -- independentes uma da outra, so'
+  // a resposta final precisa das duas.
+  const [, next, explanation] = await Promise.all([
+    env.DB.prepare(
+      `INSERT INTO attempts (exercise_id, user_response, showed_up, user_id, correct) VALUES (?, ?, 1, ?, ?)`
+    )
+      .bind(exercise.id, body.user_response, user.id, grade.correct ? 1 : 0)
+      .run(),
+    recordProgress(env, user.id, exercise.id, grade.correct),
+    explainAttempt(env, exercise, body.user_response, grade.correct),
+  ]);
 
   return Response.json({
     correct: grade.correct,
@@ -92,6 +98,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // quando a correcao anexou um (gradeTextGapWithDiff, resposta errada).
     // Campo aditivo: "correct" continua vindo do match exato, FSRS nao muda.
     diff: grade.diff ?? null,
+    // paragrafo de feedback (certo OU errado) gerado a cada tentativa --
+    // decisao do usuario. null se a chamada ao LLM falhar (nunca bloqueia
+    // o registro da tentativa em si, ver explainAttempt).
+    explanation,
     // gabarito pos-tentativa (frase-fonte) -- so pros templates audio-primeiro
     // (DictationEngine, que chega com prompt=null na sessao). Pros outros,
     // "prompt" e' um esqueleto/gap/estrutura JSON, nao a resposta -- mostrar
@@ -155,9 +165,9 @@ async function handlePhoneticAttempt(env: Env, userId: number, exercise: Exercis
   }
 
   const attemptResult = await env.DB.prepare(
-    `INSERT INTO attempts (exercise_id, user_response, showed_up, user_id) VALUES (?, ?, 1, ?)`
+    `INSERT INTO attempts (exercise_id, user_response, showed_up, user_id, correct) VALUES (?, ?, 1, ?, ?)`
   )
-    .bind(exercise.id, userResponse, userId)
+    .bind(exercise.id, userResponse, userId, correct ? 1 : 0)
     .run();
   const attemptId = attemptResult.meta.last_row_id;
 

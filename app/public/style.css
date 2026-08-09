@@ -333,6 +333,19 @@ button.link {
   color: var(--ink-soft);
 }
 
+/* paragrafo de feedback em linguagem natural (certo OU errado, sempre) --
+   tom neutro, distinto do bloco .feedback correct/incorrect (que carrega a
+   cor do resultado) pra nao competir visualmente com ele. */
+.explanation {
+  margin: 0.6rem 0 0;
+  padding: 0.9rem 1.1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
 .video-wrap {
   position: relative;
   width: 100%;
@@ -803,6 +816,158 @@ button.link {
 .topic-count {
   font-size: 0.78rem;
   color: var(--ink-soft);
+}
+
+.topic-count.dominated {
+  color: var(--good);
+  font-weight: 600;
+}
+
+/* Dashboard de progresso (docs/14) -- "Perfil & Motivo" que o docs/09
+   previa como pendencia P1. Reusa .topic-bar-track/.topic-bar-fill/
+   .topic-name/.topic-count acima (mesma barra verde-sobre-neutro dos cards
+   de categoria) em vez de inventar um componente de barra novo. */
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.dashboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.word-of-day {
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  background: var(--accent-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.word-of-day-pos {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+.word-of-day-lemma {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.word-of-day-example {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+.vocab-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.vocab-count-number {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.vocab-count-label {
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+.vocab-words {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.vocab-word-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.vocab-word-lemma {
+  font-weight: 500;
+}
+
+.vocab-word-meta {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+/* Calendario de uso -- rampa do --accent (docs/14: verde ja significa
+   "resposta certa" em outro lugar do app, nao misturar os dois sinais).
+   Dia sem uso fica no --line neutro, nunca cor de falha. */
+.calendar-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 1fr);
+  gap: 3px;
+  overflow-x: auto;
+  padding-bottom: 0.3rem;
+}
+
+.calendar-cell {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.calendar-cell[data-level="1"] { background: color-mix(in srgb, var(--accent) 30%, white); }
+.calendar-cell[data-level="2"] { background: color-mix(in srgb, var(--accent) 55%, white); }
+.calendar-cell[data-level="3"] { background: color-mix(in srgb, var(--accent) 80%, white); }
+.calendar-cell[data-level="4"] { background: var(--accent); }
+
+.mastery-categoria {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0.7rem 0 0.1rem;
+}
+
+.mastery-topic {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.mastery-topic-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.regen-trigger {
+  align-self: flex-start;
+  margin-top: 0.2rem;
+  font-size: 0.82rem;
+}
+
+.regen-panel:not([hidden]) {
+  margin-top: 0.3rem;
 }
 
 /* Leitura/Vídeo: hub de blocos/clipes + tela de bloco aberto (sequência

@@ -1,0 +1,18 @@
+{
+  "name": "deutsch-generation-service",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "vendor": "./prepare-vendor.sh",
+    "deploy": "npm run vendor && wrangler deploy",
+    "dev": "npm run vendor && wrangler dev"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5",
+    "typescript": "^5",
+    "wrangler": "^4"
+  }
+}

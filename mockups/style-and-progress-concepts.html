@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Estilos visuais e conceitos de progresso</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css" />
+<style>
+  :root {
+    --ink: #1c1f22; --ink-soft: #5a6169; --paper: #fafaf8; --line: #e3e2dd;
+    --accent: #3d5a80; --accent-soft: #eaf0f6;
+    --good: #2f7d4f; --good-soft: #e7f4ec;
+    --caution: #92400e; --caution-soft: #fdf1e0;
+    --radius: 10px;
+    --viv-green: #58cc02; --viv-gold: #ffc800; --viv-orange: #ff9600;
+    --viv-red: #ff4b4b; --viv-blue: #1cb0f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #efeee9; color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5;
+  }
+  .wrap { max-width: 68rem; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+  h2.section { font-size: 1.2rem; font-weight: 600; margin: 2.2rem 0 0.3rem; }
+  p.section-sub { font-size: 0.9rem; color: var(--ink-soft); margin: 0 0 1.2rem; }
+  .grid6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  @media (max-width: 720px) { .grid6 { grid-template-columns: 1fr 1fr; } }
+
+  .style-card { border-radius: 14px; overflow: hidden; border: 1.5px solid var(--line); background: white; }
+  .style-swatch { height: 6.5rem; display: flex; align-items: center; justify-content: center; }
+  .style-label { padding: 0.7rem 0.85rem; }
+  .style-name { font-weight: 600; font-size: 0.9rem; }
+  .style-ex { font-size: 0.78rem; color: var(--ink-soft); margin-top: 0.1rem; }
+
+  .sw-flat { background: var(--paper); }
+  .sw-flat .mini-btn { background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.8rem; border: 1px solid var(--line); }
+
+  .sw-editorial { background: #f4f1ea; }
+  .sw-editorial .mini-btn { background: transparent; color: #8a6d3b; padding: 0.45rem 1.1rem; border-radius: 4px; font-size: 0.8rem; border: 1.5px solid #8a6d3b; font-family: Georgia, serif; }
+
+  .sw-glass { background: linear-gradient(135deg,#7fb8e0,#b98be0); position: relative; }
+  .sw-glass .mini-btn {
+    background: rgba(255,255,255,0.35); backdrop-filter: blur(6px);
+    color: #1c1f22; padding: 0.5rem 1.1rem; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.6); font-size: 0.8rem;
+  }
+
+  .sw-neu { background: #e6e5e0; }
+  .sw-neu .mini-btn {
+    background: #e6e5e0; color: #5a6169; padding: 0.5rem 1.1rem; border-radius: 12px;
+    border: none; font-size: 0.8rem;
+    box-shadow: 4px 4px 8px #c9c8c3, -4px -4px 8px #ffffff;
+  }
+
+  .sw-illus { background: linear-gradient(180deg,#58cc02,#3ea800); }
+  .sw-illus .mascot-mini { font-size: 2.4rem; }
+
+  .sw-brutal { background: #fff200; }
+  .sw-brutal .mini-btn {
+    background: #ff4b4b; color: #1c1f22; padding: 0.5rem 1.1rem;
+    border: 3px solid #1c1f22; border-radius: 0; font-size: 0.8rem; font-weight: 700;
+    box-shadow: 4px 4px 0 #1c1f22;
+  }
+
+  .concept-block { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.4rem; }
+  @media (max-width: 720px) { .concept-block { grid-template-columns: 1fr; } }
+  .concept-panel { border-radius: var(--radius); padding: 1.1rem; border: 1.5px solid var(--line); }
+  .concept-panel.vivid { background: #fff9e8; }
+  .concept-panel.calm { background: white; }
+  .concept-tag { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 0.6rem; }
+  .concept-tag.vivid { color: var(--viv-orange); }
+  .concept-tag.calm { color: var(--good); }
+
+  .streak-flame { display: flex; align-items: center; gap: 0.5rem; font-size: 1.6rem; font-weight: 700; color: var(--viv-orange); }
+  .streak-flame i { font-size: 1.8rem; animation: flick 1.2s ease-in-out infinite; }
+  @keyframes flick { 0%,100% { transform: scale(1) rotate(-2deg); } 50% { transform: scale(1.08) rotate(2deg); } }
+  .streak-calm { display: flex; align-items: center; gap: 0.4rem; }
+  .streak-dot { width: 0.6rem; height: 0.6rem; border-radius: 999px; background: var(--line); }
+  .streak-dot.on { background: var(--good); }
+  .streak-calm-label { margin-left: 0.5rem; font-size: 0.85rem; color: var(--ink-soft); }
+
+  .path-vivid { display: flex; align-items: flex-end; gap: 0.3rem; }
+  .path-node { width: 2.4rem; height: 2.4rem; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.1rem; }
+  .path-node:nth-child(odd) { margin-bottom: 0.8rem; }
+  .path-vivid .path-node:nth-child(1) { background: var(--viv-gold); }
+  .path-vivid .path-node:nth-child(2) { background: var(--viv-green); }
+  .path-vivid .path-node:nth-child(3) { background: var(--viv-blue); }
+  .path-vivid .path-node:nth-child(4) { background: var(--viv-red); }
+  .path-vivid .path-node:nth-child(5) { background: var(--line); color: var(--ink-soft); }
+
+  .path-calm { display: flex; align-items: center; gap: 0; }
+  .path-calm .seg { width: 2.5rem; height: 3px; background: var(--line); }
+  .path-calm .seg.done { background: var(--good); }
+  .path-calm .node { width: 0.85rem; height: 0.85rem; border-radius: 999px; background: var(--line); flex-shrink: 0; }
+  .path-calm .node.done { background: var(--good); }
+  .path-calm .node.now { background: var(--accent); width: 1.05rem; height: 1.05rem; }
+
+  .tree-row { display: flex; align-items: flex-end; gap: 0.8rem; }
+  .tree-stage { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+  .tree-stage i { font-size: 1.8rem; }
+  .tree-stage span { font-size: 0.68rem; color: var(--ink-soft); }
+  .tree-vivid i { color: var(--viv-green); }
+  .tree-calm i { color: var(--good); opacity: 0.4; }
+  .tree-calm i.active { opacity: 1; }
+
+  .mascot-row { display: flex; align-items: center; gap: 1rem; }
+  .mascot-big { font-size: 3rem; }
+  .mascot-states { display: flex; gap: 0.5rem; }
+  .mascot-states button { border: 1.5px solid var(--line); background: white; border-radius: 8px; padding: 0.3rem 0.55rem; cursor: pointer; font-size: 0.75rem; font-family: inherit; }
+  .no-mascot-note { font-size: 0.85rem; color: var(--ink-soft); }
+
+  .celebrate-vivid { position: relative; height: 4.5rem; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .confetti { position: absolute; width: 6px; height: 10px; opacity: 0; }
+  .celebrate-btn { background: var(--viv-green); color: white; border: none; padding: 0.55rem 1.1rem; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  @keyframes fall { 0% { transform: translateY(-10px) rotate(0deg); opacity: 1; } 100% { transform: translateY(70px) rotate(360deg); opacity: 0; } }
+  .confetti.go { animation: fall 0.9s ease-in forwards; }
+
+  .celebrate-calm { display: flex; align-items: center; gap: 0.6rem; }
+  .check-circle { width: 2.2rem; height: 2.2rem; border-radius: 999px; background: var(--good-soft); color: var(--good); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+
+  .verdict {
+    margin-top: 2.5rem; padding: 1.2rem 1.3rem; border-radius: var(--radius);
+    background: var(--accent-soft); font-size: 0.9rem; line-height: 1.65;
+  }
+  .verdict b { color: var(--ink); }
+  .verdict-row { display: flex; gap: 0.6rem; margin-bottom: 0.5rem; align-items: flex-start; }
+  .verdict-row i { margin-top: 0.2rem; flex-shrink: 0; }
+  .verdict-row.yes i { color: var(--good); }
+  .verdict-row.no i { color: var(--caution); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h2 class="section">Estilos visuais — 6 famílias usadas hoje em apps</h2>
+  <p class="section-sub">Tratamento de superfície: cor, sombra, borda, textura. Independe de qual conceito de progresso você usa por cima.</p>
+  <div class="grid6">
+    <div class="style-card">
+      <div class="style-swatch sw-flat"><button class="mini-btn">Continuar</button></div>
+      <div class="style-label"><div class="style-name">Minimalista / plano</div><div class="style-ex">Anki, Brilliant — seu app hoje</div></div>
+    </div>
+    <div class="style-card">
+      <div class="style-swatch sw-editorial"><button class="mini-btn">Continuar</button></div>
+      <div class="style-label"><div class="style-name">Editorial / calmo</div><div class="style-ex">Headspace, Calm</div></div>
+    </div>
+    <div class="style-card">
+      <div class="style-swatch sw-glass"><button class="mini-btn">Continuar</button></div>
+      <div class="style-label"><div class="style-name">Vidro (glassmorphism)</div><div class="style-ex">iOS, Windows 11</div></div>
+    </div>
+    <div class="style-card">
+      <div class="style-swatch sw-neu"><button class="mini-btn">Continuar</button></div>
+      <div class="style-label"><div class="style-name">Soft UI (neumorphism)</div><div class="style-ex">alguns apps de saúde/finanças</div></div>
+    </div>
+    <div class="style-card">
+      <div class="style-swatch sw-illus"><span class="mascot-mini">🦉</span></div>
+      <div class="style-label"><div class="style-name">Ilustrado / mascote</div><div class="style-ex">Duolingo, Khan Academy Kids</div></div>
+    </div>
+    <div class="style-card">
+      <div class="style-swatch sw-brutal"><button class="mini-btn">CONTINUAR</button></div>
+      <div class="style-label"><div class="style-name">Neobrutalista</div><div class="style-ex">tendência atual em edtech/fitness</div></div>
+    </div>
+  </div>
+
+  <h2 class="section">Conceitos de progresso — versão vibrante vs. versão calma</h2>
+  <p class="section-sub">Mesmo conceito, dois tratamentos. A coluna calma reusa os tokens que já existem no seu app (--accent, --good, --caution).</p>
+
+  <div class="concept-block">
+    <div class="concept-panel vivid">
+      <div class="concept-tag vivid">Streak — vibrante</div>
+      <div class="streak-flame"><i class="ti ti-flame-filled"></i> 47</div>
+    </div>
+    <div class="concept-panel calm">
+      <div class="concept-tag calm">Streak — calmo</div>
+      <div class="streak-calm">
+        <span class="streak-dot on"></span><span class="streak-dot on"></span><span class="streak-dot on"></span>
+        <span class="streak-dot on"></span><span class="streak-dot on"></span><span class="streak-dot"></span><span class="streak-dot"></span>
+        <span class="streak-calm-label">5 de 7 dias — recorde pessoal: 12</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="concept-block">
+    <div class="concept-panel vivid">
+      <div class="concept-tag vivid">Trilha — vibrante</div>
+      <div class="path-vivid">
+        <span class="path-node"><i class="ti ti-star-filled"></i></span>
+        <span class="path-node"><i class="ti ti-check"></i></span>
+        <span class="path-node"><i class="ti ti-check"></i></span>
+        <span class="path-node"><i class="ti ti-lock"></i></span>
+        <span class="path-node"><i class="ti ti-lock"></i></span>
+      </div>
+    </div>
+    <div class="concept-panel calm">
+      <div class="concept-tag calm">Trilha — calma (MasteryTrail)</div>
+      <div class="path-calm">
+        <span class="node done"></span><span class="seg done"></span>
+        <span class="node done"></span><span class="seg done"></span>
+        <span class="node now"></span><span class="seg"></span>
+        <span class="node"></span><span class="seg"></span>
+        <span class="node"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="concept-block">
+    <div class="concept-panel vivid">
+      <div class="concept-tag vivid">Crescimento — vibrante</div>
+      <div class="tree-row">
+        <div class="tree-stage tree-vivid"><i class="ti ti-seeding"></i><span>10%</span></div>
+        <div class="tree-stage tree-vivid"><i class="ti ti-plant-2"></i><span>45%</span></div>
+        <div class="tree-stage tree-vivid"><i class="ti ti-tree"></i><span>90%</span></div>
+      </div>
+    </div>
+    <div class="concept-panel calm">
+      <div class="concept-tag calm">Domínio por categoria — calmo</div>
+      <div class="tree-row">
+        <div class="tree-stage tree-calm"><i class="ti ti-circle-filled active"></i><span>Präpositionen 30%</span></div>
+        <div class="tree-stage tree-calm"><i class="ti ti-circle-filled active"></i><span>Passiv 60%</span></div>
+        <div class="tree-stage tree-calm"><i class="ti ti-circle-filled active"></i><span>Zeiten 82%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="concept-block">
+    <div class="concept-panel vivid">
+      <div class="concept-tag vivid">Mascote — vibrante</div>
+      <div class="mascot-row">
+        <span class="mascot-big" id="mascot-face">🦉</span>
+        <div class="mascot-states">
+          <button data-face="🦉">neutro</button>
+          <button data-face="😄">acertou</button>
+          <button data-face="😢">notificação</button>
+          <button data-face="😤">errou</button>
+        </div>
+      </div>
+    </div>
+    <div class="concept-panel calm">
+      <div class="concept-tag calm">Sem mascote — calmo</div>
+      <p class="no-mascot-note">Nenhum personagem. O reconhecimento fica no <code>ShowedUpBadge</code> (pill de texto, "você tentou — isso já conta") em vez de uma reação emocional de terceiro observando o desempenho — mais alinhado a um perfil de ansiedade de avaliação social.</p>
+    </div>
+  </div>
+
+  <div class="concept-block">
+    <div class="concept-panel vivid">
+      <div class="concept-tag vivid">Celebração — vibrante</div>
+      <div class="celebrate-vivid" id="confetti-area">
+        <button class="celebrate-btn" id="confetti-btn">Lição completa!</button>
+      </div>
+    </div>
+    <div class="concept-panel calm">
+      <div class="concept-tag calm">Celebração — calma</div>
+      <div class="celebrate-calm">
+        <span class="check-circle"><i class="ti ti-check"></i></span>
+        <span style="font-size:0.9rem; color:var(--ink-soft)">Sessão concluída — 10 exercícios.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="verdict">
+    <div class="verdict-row yes"><i class="ti ti-check"></i><span><b>Vale adotar, versão calma:</b> trilha/path — já é a base do <code>MasteryTrail</code> recomendado no docs/09 e do grid de categorias do docs/12. Domínio visual por categoria substitui bem a metáfora de árvore, sem precisar de ilustração.</span></div>
+    <div class="verdict-row yes"><i class="ti ti-check"></i><span><b>Vale adotar, com "perdão":</b> streak — funciona como motivador mesmo sem chama/cor de alarme; a mecânica de perdão (não reseta a zero num dia perdido por falta de execução, não de motivação) já está decidida no CLAUDE.md.</span></div>
+    <div class="verdict-row no"><i class="ti ti-flame-filled" style="color:var(--caution)"></i><span><b>Evitar:</b> mascote com estados emocionais e celebração vibrante (confete/som) — a pesquisa por trás do "baby schema effect" do Duo existe pra prender atenção de um público de massa; pra um perfil com ansiedade social e TDAH, um personagem "reagindo" ao seu desempenho reintroduz exatamente a sensação de estar sendo avaliado que o projeto já decidiu evitar (separação showed_up/correção).</span></div>
+    <div class="verdict-row no"><i class="ti ti-flame-filled" style="color:var(--caution)"></i><span><b>Evitar:</b> neobrutalismo e liga/leaderboard — bordas grossas e alto contraste competem com a legibilidade calma já priorizada; liga não se aplica (uso solo, sem outros usuários pra comparar).</span></div>
+  </div>
+
+</div>
+<script>
+document.querySelectorAll('.mascot-states button').forEach(function(b) {
+  b.addEventListener('click', function() {
+    document.getElementById('mascot-face').textContent = b.dataset.face;
+  });
+});
+document.getElementById('confetti-btn').addEventListener('click', function() {
+  const area = document.getElementById('confetti-area');
+  const colors = ['#ff4b4b','#ffc800','#58cc02','#1cb0f6'];
+  for (let i = 0; i < 16; i++) {
+    const c = document.createElement('span');
+    c.className = 'confetti';
+    c.style.left = (10 + Math.random()*80) + '%';
+    c.style.top = '0px';
+    c.style.background = colors[i % colors.length];
+    area.appendChild(c);
+    requestAnimationFrame(function() { c.classList.add('go'); });
+    setTimeout(function() { c.remove(); }, 1000);
+  }
+});
+</script>
+</body>
+</html>

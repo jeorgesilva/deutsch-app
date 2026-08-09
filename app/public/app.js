@@ -12,6 +12,7 @@ const crumbEl = document.getElementById("crumb");
 const blockContextEl = document.getElementById("block-context");
 const changePasswordBtn = document.getElementById("change-password-btn");
 const logoutBtn = document.getElementById("logout-btn");
+const dashboardBtn = document.getElementById("dashboard-btn");
 
 let session = [];
 let index = 0;
@@ -51,6 +52,7 @@ async function boot() {
   currentUser = data.user;
   changePasswordBtn.hidden = false;
   logoutBtn.hidden = false;
+  dashboardBtn.hidden = false;
   renderHome();
   loadBanner();
 }
@@ -58,6 +60,7 @@ async function boot() {
 function renderAuthScreen(mode) {
   currentView = "auth";
   logoutBtn.hidden = true;
+  dashboardBtn.hidden = true;
   progressEl.textContent = "";
   bannerEl.classList.add("banner-hidden");
 
@@ -107,6 +110,7 @@ function renderAuthScreen(mode) {
     currentUser = data;
     changePasswordBtn.hidden = false;
     logoutBtn.hidden = false;
+    dashboardBtn.hidden = false;
     renderHome();
     loadBanner();
   });
@@ -133,6 +137,7 @@ function renderChangePassword() {
     currentView = previousView;
     if (previousView === "planner") renderPlanner();
     else if (previousView === "session") loadSession();
+    else if (previousView === "dashboard") renderDashboard();
     else renderHome();
   };
 
@@ -162,6 +167,7 @@ function renderChangePassword() {
 }
 
 changePasswordBtn.addEventListener("click", renderChangePassword);
+dashboardBtn.addEventListener("click", renderDashboard);
 
 logoutBtn.addEventListener("click", async () => {
   await fetch("/api/auth/logout", { method: "POST" });
@@ -260,6 +266,280 @@ async function renderHome() {
   document.getElementById("group-video").addEventListener("click", renderVideoHub);
   document.getElementById("group-weekly").addEventListener("click", renderPlanner);
   document.getElementById("group-conversations").addEventListener("click", renderHostileLadder);
+}
+
+// ---------- Dashboard de progresso (docs/14) ----------
+// "Perfil & Motivo" que o docs/09 previa como pendencia P1 e nunca chegou a
+// desenhar -- alcancado a partir do topbar (nao um card do grid da home,
+// que ja tem os 6 grupos fechados do docs/12). Barra de acerto/erro,
+// calendario de uso, vocabulario contatado, palavra do dia -- os 4
+// elementos do docs/14, cada um vindo de um endpoint proprio em
+// /api/dashboard/*. Cores seguem a mesma regra ja fechada na Fase 12:
+// nunca vermelho puro pra "errado" (--caution ambar quando preciso, aqui
+// nem isso -- so o verde cresce, o resto fica no track neutro), calendario
+// na rampa do --accent (nao verde, que ja significa "resposta certa" em
+// outro lugar do app).
+let dashboardMasteryGroup = "grammar";
+
+async function renderDashboard() {
+  currentView = "dashboard";
+  progressEl.textContent = "";
+  setCrumb("Início", renderHome);
+  clearBlockContext();
+  main.innerHTML = `<p class="loading">Carregando progresso…</p>`;
+
+  const [wordRes, vocabRes, calendarRes, masteryRes] = await Promise.all([
+    fetch("/api/dashboard/word-of-the-day"),
+    fetch("/api/dashboard/vocabulary"),
+    fetch("/api/dashboard/calendar"),
+    fetch(`/api/dashboard/mastery?group=${dashboardMasteryGroup}`),
+  ]);
+  const wordData = await wordRes.json();
+  const vocabData = await vocabRes.json();
+  const calendarData = await calendarRes.json();
+  const masteryData = await masteryRes.json();
+
+  main.innerHTML = `
+    <p class="screen-title">Progresso</p>
+    <div class="dashboard">
+      ${wordOfDayHtml(wordData.word)}
+      <div class="dashboard-section">
+        <p class="screen-sub" style="margin:0 0 0.1rem">Vocabulário com contato</p>
+        ${vocabularyHtml(vocabData)}
+      </div>
+      <div class="dashboard-section">
+        <p class="screen-sub" style="margin:0 0 0.1rem">Uso ao longo do tempo</p>
+        ${calendarHtml(calendarData.days)}
+      </div>
+      <div class="dashboard-section">
+        <p class="screen-sub" style="margin:0 0 0.1rem">Domínio por tópico</p>
+        <div class="filter-row" id="mastery-group-filter">
+          <button class="filter-chip${dashboardMasteryGroup === "grammar" ? " on" : ""}" data-group="grammar">Gramática</button>
+          <button class="filter-chip${dashboardMasteryGroup === "phonetics" ? " on" : ""}" data-group="phonetics">Fonética</button>
+        </div>
+        <div id="mastery-list">${masteryListHtml(masteryData.topics)}</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("mastery-group-filter").addEventListener("click", async (e) => {
+    const chip = e.target.closest(".filter-chip");
+    if (!chip || chip.classList.contains("on")) return;
+    dashboardMasteryGroup = chip.dataset.group;
+    document.querySelectorAll("#mastery-group-filter .filter-chip").forEach((c) => c.classList.remove("on"));
+    chip.classList.add("on");
+    await reloadMasteryList();
+  });
+
+  setupVocabularyInteraction();
+  setupRegenerationInteraction();
+}
+
+async function reloadMasteryList() {
+  const listEl = document.getElementById("mastery-list");
+  listEl.innerHTML = `<p class="loading">Carregando…</p>`;
+  const res = await fetch(`/api/dashboard/mastery?group=${dashboardMasteryGroup}`);
+  const data = await res.json();
+  listEl.innerHTML = masteryListHtml(data.topics);
+}
+
+// "Definição" não existe como dado real em lugar nenhum do projeto (nem
+// lexicon, nem lookupWiktionary) -- nunca fabricar isso via LLM sem gate
+// (CLAUDE.md: geração é sempre constrained pela KB). Mostra só o que é de
+// fato sourced: classe gramatical + a frase real onde a palavra apareceu.
+// Origem (tentativa errada) fica só na lógica de seleção do backend -- aqui
+// não há nenhum rótulo de erro, mesmo princípio do DictationEngine.
+function wordOfDayHtml(word) {
+  if (!word) return "";
+  return `
+    <div class="word-of-day">
+      <span class="word-of-day-pos">${escapeHtml(word.pos)}</span>
+      <span class="word-of-day-lemma">${escapeHtml(word.lemma)}</span>
+      ${word.exemplo ? `<span class="word-of-day-example">${escapeHtml(word.exemplo)}</span>` : ""}
+    </div>
+  `;
+}
+
+function vocabularyHtml(vocabData) {
+  const posChips = Object.entries(vocabData.by_pos)
+    .map(([pos, count]) => `<button class="filter-chip" data-pos="${escapeHtml(pos)}">${escapeHtml(pos)} · ${count}</button>`)
+    .join("");
+  return `
+    <div class="vocab-count">
+      <span class="vocab-count-number">${vocabData.total}</span>
+      <span class="vocab-count-label">palavra${vocabData.total === 1 ? "" : "s"} com pelo menos 1 acerto</span>
+    </div>
+    ${posChips ? `<div class="filter-row" id="vocab-pos-filter">${posChips}</div>` : ""}
+    <div class="vocab-words" id="vocab-words" hidden></div>
+  `;
+}
+
+function setupVocabularyInteraction() {
+  const filterEl = document.getElementById("vocab-pos-filter");
+  const wordsEl = document.getElementById("vocab-words");
+  if (!filterEl) return;
+
+  filterEl.addEventListener("click", async (e) => {
+    const chip = e.target.closest(".filter-chip");
+    if (!chip) return;
+    const alreadyOn = chip.classList.contains("on");
+    filterEl.querySelectorAll(".filter-chip").forEach((c) => c.classList.remove("on"));
+    if (alreadyOn) {
+      wordsEl.hidden = true;
+      wordsEl.innerHTML = "";
+      return;
+    }
+    chip.classList.add("on");
+    wordsEl.hidden = false;
+    wordsEl.innerHTML = `<p class="loading">Carregando…</p>`;
+    const res = await fetch(`/api/dashboard/vocabulary?pos=${encodeURIComponent(chip.dataset.pos)}`);
+    const data = await res.json();
+    wordsEl.innerHTML =
+      (data.words ?? [])
+        .map((w) => {
+          const meta = [w.gender, w.plural, w.ipa].filter(Boolean).join(" · ");
+          return `<div class="vocab-word-row"><span class="vocab-word-lemma">${escapeHtml(w.lemma)}</span>${meta ? `<span class="vocab-word-meta">${escapeHtml(meta)}</span>` : ""}</div>`;
+        })
+        .join("") || `<p class="empty">Nenhuma palavra ainda.</p>`;
+  });
+}
+
+// Faixa de dias terminando hoje, coluna = semana (grid-auto-flow: column no
+// CSS) -- densidade de uso, não alinhamento estrito a dia-da-semana (sem
+// ganho real pra uma janela de ~4 meses).
+const CALENDAR_DAYS = 119;
+
+function calendarHtml(days) {
+  const counts = new Map((days ?? []).map((d) => [d.date, d.count]));
+  const today = new Date();
+  const cells = [];
+  for (let i = CALENDAR_DAYS - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const count = counts.get(key) ?? 0;
+    const level = count === 0 ? 0 : count <= 2 ? 1 : count <= 5 ? 2 : count <= 10 ? 3 : 4;
+    cells.push(`<span class="calendar-cell" data-level="${level}" title="${key}: ${count}"></span>`);
+  }
+  return `<div class="calendar-grid">${cells.join("")}</div>`;
+}
+
+function masteryListHtml(topics) {
+  if (!topics || topics.length === 0) return `<p class="empty">Nenhum tópico com conteúdo disponível ainda.</p>`;
+  let html = "";
+  let lastCategoria = null;
+  for (const t of topics) {
+    if (t.categoria !== lastCategoria) {
+      html += `<p class="mastery-categoria">${escapeHtml(t.categoria)}</p>`;
+      lastCategoria = t.categoria;
+    }
+    const pct = Math.round(t.fraction * 100);
+    html += `
+      <div class="mastery-topic" data-topic-id="${t.content_topic_id}">
+        <div class="mastery-topic-head">
+          <span class="topic-name">${escapeHtml(t.topico)}</span>
+          <span class="topic-count${t.dominated ? " dominated" : ""}">${t.mastered}/${t.total}${t.dominated ? " · dominado" : ""}</span>
+        </div>
+        <span class="topic-bar-track"><span class="topic-bar-fill" style="width:${pct}%"></span></span>
+        ${
+          t.dominated
+            ? `<button class="link regen-trigger" data-topic-id="${t.content_topic_id}">Gerar mais exercícios</button>
+               <div class="regen-panel" data-topic-id="${t.content_topic_id}" hidden></div>`
+            : ""
+        }
+      </div>
+    `;
+  }
+  return html;
+}
+
+// Geração sob demanda (docs/14) -- só aparece quando o tópico já está
+// "dominado" (mastered === total), nunca dispara sozinho: clique revela uma
+// confirmação inline com estimativa de chamadas de LLM antes de qualquer
+// requisição de verdade. Delegação de evento em #mastery-list (elemento
+// estável entre trocas de Gramática/Fonética, só o innerHTML muda) em vez
+// de um listener por linha -- sobrevive a reloadMasteryList() sem
+// re-registrar nada.
+function setupRegenerationInteraction() {
+  const listEl = document.getElementById("mastery-list");
+  listEl.addEventListener("click", async (e) => {
+    const trigger = e.target.closest(".regen-trigger");
+    const cancel = e.target.closest(".regen-cancel");
+    const confirmBtn = e.target.closest(".regen-confirm");
+
+    if (trigger) {
+      const topicId = trigger.dataset.topicId;
+      const panel = listEl.querySelector(`.regen-panel[data-topic-id="${topicId}"]`);
+      panel.hidden = false;
+      panel.innerHTML = `<p class="loading">Calculando…</p>`;
+      const res = await fetch(`/api/topic-regeneration/estimate?content_topic_id=${topicId}`);
+      const data = await res.json();
+      if (!res.ok) {
+        panel.innerHTML = `<p class="error">${escapeHtml(data.error ?? "não foi possível estimar")}</p>`;
+        return;
+      }
+      const engineLabels = data.engines.map(templateLabel).join(", ");
+      panel.innerHTML = `
+        <p class="screen-sub" style="margin:0.4rem 0">
+          Isso gera mais ~5 exercícios por formato (${data.engines.length} formato${data.engines.length === 1 ? "" : "s"}: ${escapeHtml(engineLabels)})
+          -- ${data.calls_estimate} chamada${data.calls_estimate === 1 ? "" : "s"} de LLM. O lote antigo continua servível, nada é substituído.
+        </p>
+        <div class="filter-row">
+          <button class="primary regen-confirm" data-topic-id="${topicId}">Confirmar</button>
+          <button class="link regen-cancel" data-topic-id="${topicId}">Cancelar</button>
+        </div>
+      `;
+      return;
+    }
+
+    if (cancel) {
+      const panel = listEl.querySelector(`.regen-panel[data-topic-id="${cancel.dataset.topicId}"]`);
+      panel.hidden = true;
+      panel.innerHTML = "";
+      return;
+    }
+
+    if (confirmBtn) {
+      const topicId = confirmBtn.dataset.topicId;
+      const panel = listEl.querySelector(`.regen-panel[data-topic-id="${topicId}"]`);
+      panel.innerHTML = `<p class="loading">Gerando… isso pode levar alguns minutos.</p>`;
+      const res = await fetch("/api/topic-regeneration/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content_topic_id: Number(topicId) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        panel.innerHTML = `<p class="error">${escapeHtml(data.error ?? "não foi possível iniciar")}</p>`;
+        return;
+      }
+      pollRegenerationJob(panel, data.job_id);
+    }
+  });
+}
+
+async function pollRegenerationJob(panel, jobId) {
+  const res = await fetch(`/api/topic-regeneration/status?job_id=${jobId}`);
+  const data = await res.json();
+  const job = data.job;
+
+  if (!job || job.status === "pending" || job.status === "running") {
+    setTimeout(() => pollRegenerationJob(panel, jobId), 4000);
+    return;
+  }
+
+  if (job.status === "done") {
+    panel.innerHTML = `<p class="feedback correct">Pronto -- lote novo adicionado.</p>`;
+    // deixa a confirmação visível um instante antes de recarregar a lista
+    // (mastered/total mudam -- o lote novo entra "não tentado ainda").
+    setTimeout(reloadMasteryList, 1500);
+    return;
+  }
+
+  // job.status === "failed" -- cota estourada, provedor indisponível etc.
+  // Erro técnico real, não "resposta errada" -- fica no tom neutro de
+  // .error, não no --caution que feedback de idioma usa.
+  panel.innerHTML = `<p class="error">Geração falhou: ${escapeHtml(job.error ?? "erro desconhecido")}</p>`;
 }
 
 // placeholder temporario pros grupos cuja fatia ainda nao chegou --
@@ -2330,6 +2610,8 @@ function showPhoneticFeedback(result) {
 
 async function submitAttempt(exerciseId, userResponse) {
   disableInputs();
+  const feedbackEl = document.getElementById("feedback");
+  if (feedbackEl) feedbackEl.innerHTML = `<p class="loading">Avaliando…</p>`;
   const res = await fetch("/api/attempts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2372,6 +2654,7 @@ function showFeedback(result) {
       ${result.correct ? "" : `<span class="answer">${escapeHtml(correctText)}</span>`}
     </div>
     ${diffHtml}
+    ${result.explanation ? `<p class="explanation">${escapeHtml(result.explanation)}</p>` : ""}
     <button class="link" id="next">Continuar →</button>
   `;
   document.getElementById("next").addEventListener("click", advance);

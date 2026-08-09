@@ -33,6 +33,7 @@ import time
 from pathlib import Path
 
 from ..ingest.write_exercises import build_insert, execute_d1, query_d1
+from ..lexicon.link_exercise_lexicon import link_new_exercises
 from ..validation.harness import validate_batch
 from . import prompts as gapfill_prompts
 from . import prompts_fillblank as fillblank_prompts
@@ -191,6 +192,15 @@ def main():
         # com auto_ok -- os dois sao "auto_ok" pro D1 (validation/harness.py DB_STATUS).
         ok = sum(1 for e in exercises if e["validation_status"] == "auto_ok")
         print(f"  -> {ok}/{len(exercises)} auto_ok, {inserted} gravados no D1 ({skipped} pulados)")
+
+    # docs/14 -- liga cada exercicio novo a lexicon (exercise_lexicon_refs),
+    # pro contador de vocabulario do dashboard. Idempotente/incremental por
+    # construcao (so pega exercicios sem ref ainda), roda uma vez no fim do
+    # lote inteiro em vez de por topico -- lematizar e' barato comparado a
+    # gerar/validar, nao precisa do checkpoint por topico dos passos acima.
+    processed, with_refs = link_new_exercises()
+    if processed:
+        print(f"[lexicon] {processed} exercicios novos lematizados, {with_refs} ganharam pelo menos 1 exercise_lexicon_refs.")
 
         all_exercises.extend(exercises)
         lt_path.write_text(json.dumps(all_exercises, ensure_ascii=False, indent=2), encoding="utf-8")  # checkpoint

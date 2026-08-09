@@ -175,4 +175,11 @@ export interface Env {
   // .dev.vars (gitignored) sob outro nome pra seguir a convencao de env
   // var do Worker.
   HUGGINGFACE_API_KEY?: string;
+  // docs/14 -- geração sob demanda: cliente HTTP do Worker de Cloudflare
+  // Containers em services/generation-container/ (mesmo padrão de
+  // PHONETIC_SERVICE_URL/PHONETIC_SHARED_SECRET, serviço próprio -- gerar
+  // exercício precisa de spaCy/LanguageTool/Java, que o container fonético
+  // nunca teve).
+  GENERATION_SERVICE_URL?: string;
+  GENERATION_SHARED_SECRET?: string;
 }

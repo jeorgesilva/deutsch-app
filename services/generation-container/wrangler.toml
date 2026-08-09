@@ -1,0 +1,25 @@
+# docs/14 -- servico de geracao sob demanda em Cloudflare Containers, mesmo
+# padrao do phonetic-container (Worker normal, nao Pages Functions --
+# Containers exige DO declarada com `main`). UNICA excecao a
+# enableInternet=false do resto do projeto -- ver src/index.ts pro porque
+# e a mitigacao (allowedHosts restrito aos 2 hosts de LLM usados).
+name = "deutsch-generation-service"
+compatibility_date = "2026-07-31"
+main = "src/index.ts"
+
+[[containers]]
+class_name = "GenerationContainer"
+image = "./Dockerfile"
+# 1/2 vCPU / 4 GiB / 8 GB disco -- sem torch/wav2vec2 (esse e' o servico
+# fonetico), so spaCy de_core_news_lg + JVM do LanguageTool cabem com folga
+# nesse tamanho menor; ajustar se OOM em uso real.
+instance_type = "standard-1"
+max_instances = 1
+
+[[durable_objects.bindings]]
+name = "GENERATION_CONTAINER"
+class_name = "GenerationContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GenerationContainer"]

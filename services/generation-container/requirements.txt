@@ -1,0 +1,12 @@
+# docs/14 -- so' o que run.py/service.py de fato importam (mesmo principio
+# ja usado em phonetic-container/requirements.txt: subconjunto minimo, nao
+# o pyproject.toml inteiro do pipeline). spacy/language-tool-python entram
+# aqui porque SAO especificos deste servico (harness de validacao) -- o
+# servico fonetico nunca precisou deles.
+flask
+waitress
+spacy
+language-tool-python
+google-genai
+openai
+python-dotenv
