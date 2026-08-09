@@ -9,6 +9,7 @@ const main = document.getElementById("main");
 const progressEl = document.getElementById("progress");
 const bannerEl = document.getElementById("banner");
 const navToggle = document.getElementById("nav-toggle");
+const changePasswordBtn = document.getElementById("change-password-btn");
 const logoutBtn = document.getElementById("logout-btn");
 
 let session = [];
@@ -30,6 +31,7 @@ async function boot() {
   const data = await res.json();
   currentUser = data.user;
   navToggle.hidden = false;
+  changePasswordBtn.hidden = false;
   logoutBtn.hidden = false;
   loadSession();
   loadBanner();
@@ -87,6 +89,7 @@ function renderAuthScreen(mode) {
     }
     currentUser = data;
     navToggle.hidden = false;
+    changePasswordBtn.hidden = false;
     logoutBtn.hidden = false;
     currentView = "session";
     navToggle.textContent = "Planejador";
@@ -94,6 +97,56 @@ function renderAuthScreen(mode) {
     loadBanner();
   });
 }
+
+function renderChangePassword() {
+  const previousView = currentView;
+  currentView = "change-password";
+  progressEl.textContent = "";
+  main.innerHTML = `
+    <div class="auth-card">
+      <h1>Trocar senha</h1>
+      <form id="change-password-form">
+        <label>Senha atual<input class="text-input" id="cp-current" type="password" autocomplete="current-password" required /></label>
+        <label>Senha nova<input class="text-input" id="cp-new" type="password" autocomplete="new-password" minlength="8" required /></label>
+        <p class="error" id="cp-error" hidden></p>
+        <button class="primary" type="submit">Salvar</button>
+      </form>
+      <button class="link" id="cp-cancel" type="button">Cancelar</button>
+    </div>
+  `;
+
+  const back = () => {
+    currentView = previousView;
+    if (previousView === "planner") renderPlanner();
+    else loadSession();
+  };
+
+  document.getElementById("cp-cancel").addEventListener("click", back);
+
+  document.getElementById("change-password-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById("cp-error");
+    errorEl.hidden = true;
+
+    const res = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        current_password: document.getElementById("cp-current").value,
+        new_password: document.getElementById("cp-new").value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errorEl.textContent = data.error ?? "algo deu errado";
+      errorEl.hidden = false;
+      return;
+    }
+    back();
+  });
+}
+
+changePasswordBtn.addEventListener("click", renderChangePassword);
 
 logoutBtn.addEventListener("click", async () => {
   await fetch("/api/auth/logout", { method: "POST" });
