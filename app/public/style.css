@@ -40,6 +40,25 @@ body {
   padding: 1.25rem 1.25rem 3rem;
 }
 
+/* Layout de desktop -- telas de grid (home, categorias, planejador) usam a
+   largura extra pra virar 2-3 colunas; telas de leitura/exercício (.card,
+   #block-context -- textos/dots de um bloco de leitura/vídeo aberto)
+   ficam com um teto de largura PRÓPRIO (--reading-width) independente de
+   .app, pra nunca esticar a linha de texto além de uma largura
+   confortável de leitura, mesmo com .app bem mais largo. .crumb fica de
+   fora dessa regra -- é só um link curto, aparece tanto em telas largas
+   (grid) quanto estreitas (exercício), não faz sentido capar a largura
+   de um elemento que nunca estica o próprio conteúdo. */
+:root {
+  --reading-width: 34rem;
+}
+
+#block-context {
+  width: 100%;
+  max-width: var(--reading-width);
+  margin: 0 auto;
+}
+
 .topbar {
   padding-bottom: 1rem;
   display: flex;
@@ -156,6 +175,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  width: 100%;
+  max-width: var(--reading-width);
+  margin: 0 auto;
 }
 
 .template-label {
@@ -907,4 +929,36 @@ button.link {
   border: 1.5px solid var(--line);
   border-radius: 999px;
   padding: 0.15rem 0.6rem;
+}
+
+/* Layout de desktop -- fica no FIM do arquivo de proposito: .group-grid/
+   .topic-grid/.planner tem sua definicao base (coluna unica) mais abaixo
+   no arquivo do que a declaracao de --reading-width la em cima; como as
+   duas tem a mesma especificidade CSS, quem vem depois no arquivo vence,
+   entao um @media aparecendo ANTES da definicao base seria silenciosamente
+   sobrescrito por ela em telas largas (bug real, pego ao revisar a ordem
+   das regras). Qualquer override de breakpoint novo deve continuar
+   entrando aqui embaixo, nao junto da declaracao de --reading-width. */
+@media (min-width: 48rem) {
+  .app {
+    max-width: 52rem;
+  }
+  .group-grid,
+  .topic-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .planner {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 64rem) {
+  .app {
+    max-width: 68rem;
+  }
+  .group-grid,
+  .topic-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
