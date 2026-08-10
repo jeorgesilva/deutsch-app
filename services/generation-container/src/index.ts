@@ -12,20 +12,17 @@
 // (cloudflare/containers egress allowlist), mesmo com enableInternet=true.
 // LanguageTool roda via subprocess Java 100% LOCAL ao container (nunca sai
 // pela rede), so o LLM usa isso.
-import { Container, ContainerProxy } from "@cloudflare/containers";
+import { Container } from "@cloudflare/containers";
 import type { DurableObject } from "cloudflare:workers";
-
-// obrigatorio sempre que enableInternet=true, com ou sem allowedHosts --
-// achado testando contra o deploy real (a documentacao so menciona a
-// combinacao com allowedHosts, mas o erro "ctx.exports.ContainerProxy is
-// undefined" apareceu igual com enableInternet=true sozinho).
-export { ContainerProxy };
 
 export class GenerationContainer extends Container<Env> {
   defaultPort = 8080;
   pingEndpoint = "/health";
   sleepAfter = "30m";
-  enableInternet = true;
+  // DIAGNOSTICO TEMPORARIO -- false pra isolar se "not running" e' sobre
+  // enableInternet especificamente ou algo mais (spaCy/LanguageTool/Java
+  // no container). Ver docs/16 -- nao e' o estado final.
+  enableInternet = false;
 
   constructor(ctx: DurableObject["ctx"], env: Env) {
     super(ctx, env);
