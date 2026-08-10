@@ -60,7 +60,10 @@ export default {
     }
 
     try {
-      const container = env.GENERATION_CONTAINER.getByName(SINGLETON_ID);
+      // DIAGNOSTICO TEMPORARIO -- DO novo a cada request, pra isolar se o
+      // "not running" vem de estado acumulado no DO singleton entre os
+      // varios deploys de teste. Ver docs/16, nao e' o estado final.
+      const container = env.GENERATION_CONTAINER.getByName(crypto.randomUUID());
       await container.startAndWaitForPorts();
       return await container.fetch(request);
     } catch (err) {
