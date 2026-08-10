@@ -27,17 +27,16 @@ enabled = true
 [[containers]]
 class_name = "GenerationContainer"
 image = "./Dockerfile"
-# 1/2 vCPU / 4 GiB / 8 GB disco -- previsao original era que spaCy
-# de_core_news_lg + JVM do LanguageTool coubessem com folga; nao confirmado
-# ainda. Candidato concreto pro crash-loop atual (docs/16): sem -Xmx
-# explicito (language_tool_python nao passa nenhum), o heap da JVM se
-# autodimensiona pelo cgroup -- Java 17 (default-jre-headless em bookworm)
-# respeita isso por padrao, entao nao e' o bug classico de JVM pre-Java10
-# ignorando limite de container, mas spaCy+JVM+Python concorrendo ainda pode
-# apertar 4GiB, principalmente se 2 requests overlaparem (waitress usa pool
-# de threads). Testar bump pra standard-2 (1 vCPU/6GiB) e' o jeito mais
-# rapido de confirmar/descartar memoria como causa, sem precisar isolar mais.
-instance_type = "standard-1"
+# Era standard-1 (4 GiB) -- crash-loop ("not running"/"internal error
+# connecting to the port" logo apos startAndWaitForPorts ter sucesso,
+# docs/16) persistiu mesmo depois de corrigir os 2 bugs de JS (storage de
+# DO poluido, ID randomico) e a ordem de campos do wrangler.toml
+# (observability engolindo `main`). spaCy de_core_news_lg + JVM do
+# LanguageTool (sem -Xmx explicito, autodimensiona pelo cgroup) + Python
+# concorrendo em 4GiB e' candidato concreto a OOM-kill silencioso -- bump
+# pra standard-2 (1 vCPU/6 GiB) e' o teste empirico mais barato disponivel
+# (sem acesso a log do container em si pra confirmar direto).
+instance_type = "standard-2"
 max_instances = 1
 
 [[durable_objects.bindings]]
