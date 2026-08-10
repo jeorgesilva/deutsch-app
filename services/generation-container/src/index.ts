@@ -12,24 +12,19 @@
 // (cloudflare/containers egress allowlist), mesmo com enableInternet=true.
 // LanguageTool roda via subprocess Java 100% LOCAL ao container (nunca sai
 // pela rede), so o LLM usa isso.
-import { Container } from "@cloudflare/containers";
+import { Container, ContainerProxy } from "@cloudflare/containers";
 import type { DurableObject } from "cloudflare:workers";
+
+// obrigatorio sempre que enableInternet=true, com ou sem allowedHosts --
+// achado testando contra o deploy real (a documentacao so menciona a
+// combinacao com allowedHosts, mas o erro "ctx.exports.ContainerProxy is
+// undefined" apareceu igual com enableInternet=true sozinho).
+export { ContainerProxy };
 
 export class GenerationContainer extends Container<Env> {
   defaultPort = 8080;
   pingEndpoint = "/health";
   sleepAfter = "30m";
-  // achado testando o deploy real: enableInternet=true + allowedHosts
-  // (com ContainerProxy exportado, exigido pra outbound interception)
-  // deixava o container preso em "not running, consider calling start()"
-  // -- mecanismo pouco documentado, não consegui isolar a causa exata sem
-  // acesso a log do container em si. Caiu pro enableInternet=true simples
-  // (mesmo padrão já comprovado do phonetic-container, só invertido) --
-  // sem allowlist de host no nível de rede, mas o acesso já é protegido
-  // por GENERATION_SHARED_SECRET, e os únicos hosts que o código de fato
-  // alcança são os que generation/llm_client.py sabe chamar (Gemini/HF,
-  // dado o "engine"/"model" que o Worker principal envia, sempre de uma
-  // lista fixa -- nunca input arbitrário de usuário final).
   enableInternet = true;
 
   constructor(ctx: DurableObject["ctx"], env: Env) {
