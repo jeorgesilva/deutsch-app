@@ -1,17 +1,16 @@
-// docs/14 -- Worker fino na frente do container Python (Flask/waitress, ver
-// ../run.py e ../Dockerfile). Mesmo padrao singleton do phonetic-container
-// (Fase 14): so' precisamos de UMA instancia, sem balanceamento.
+// docs/14/16 -- Worker fino na frente do container Python (Flask/waitress,
+// ver ../run.py e ../Dockerfile). Mesmo padrao singleton do phonetic-
+// container (Fase 14): so' precisamos de UMA instancia, sem balanceamento.
 //
-// UNICA excecao a enableInternet=false do resto do projeto: este container
-// PRECISA alcancar a API do provedor de LLM (Gemini/Hugging Face) pra gerar
-// exercicio -- geracao sempre foi "em lote/offline, nunca num Worker"
-// (CLAUDE.md), mas nunca precisou dizer "nunca alcança a internet", so
-// "nunca dentro do runtime limitado de um Worker". Mitigado com
-// allowedHosts restrito aos 2 hosts que o provedor de fato usa (ver
-// generation/llm_client.py) -- qualquer outro host recebe 520
-// (cloudflare/containers egress allowlist), mesmo com enableInternet=true.
-// LanguageTool roda via subprocess Java 100% LOCAL ao container (nunca sai
-// pela rede), so o LLM usa isso.
+// enableInternet: a premissa de que "Cloudflare Containers bloqueiam
+// internet por padrao" estava ERRADA -- conferido em
+// node_modules/@cloudflare/containers/README.md e dist/lib/container.js:325
+// ("enableInternet = true"), o default do pacote (0.3.7) e' TRUE. Este
+// container so precisa alcancar generativelanguage.googleapis.com/
+// router.huggingface.co (generation/llm_client.py); mantido SEM
+// allowedHosts/ContainerProxy de proposito -- ver o achado abaixo sobre por
+// que essa combinacao quebrou. LanguageTool roda via subprocess Java 100%
+// LOCAL ao container (nunca sai pela rede), so' o LLM usa a rede.
 import { Container } from "@cloudflare/containers";
 import type { DurableObject } from "cloudflare:workers";
 
@@ -19,10 +18,8 @@ export class GenerationContainer extends Container<Env> {
   defaultPort = 8080;
   pingEndpoint = "/health";
   sleepAfter = "30m";
-  // DIAGNOSTICO TEMPORARIO -- false pra isolar se "not running" e' sobre
-  // enableInternet especificamente ou algo mais (spaCy/LanguageTool/Java
-  // no container). Ver docs/16 -- nao e' o estado final.
-  enableInternet = false;
+  // Explicito por clareza de leitura, mesmo sendo o default do pacote.
+  enableInternet = true;
 
   constructor(ctx: DurableObject["ctx"], env: Env) {
     super(ctx, env);
@@ -45,7 +42,42 @@ interface Env {
   HUGGINGFACE_API_KEY?: string;
 }
 
-const SINGLETON_ID = "singleton";
+// ACHADO REAL (nao flakiness de plataforma beta -- confirmado lendo
+// node_modules/@cloudflare/containers/dist/lib/container.js 0.3.7 linha a
+// linha): os dois erros do ciclo de debug de hoje eram dois bugs
+// concretos e reproduziveis, nao um so' e nao aleatorio.
+//
+// 1. "ContainerProxy is undefined" -- ContainerProxy so e' exigido quando
+//    `usingInterception` fica true (container.js:361-368), disparado por
+//    allowedHosts/deniedHosts/outboundByHost/outbound OU por uma config de
+//    outbound PERSISTIDA no storage do proprio Durable Object
+//    (container.js:1065-1104, ctx.storage.kv -- nao e' parte do bundle do
+//    Worker, sobrevive a qualquer redeploy de codigo). O primeiro deploy
+//    de hoje setou allowedHosts contra o ID "singleton"; isso gravou uma
+//    outbound-config no storage DAQUELE DO especifico. Remover
+//    allowedHosts/ContainerProxy do codigo depois NUNCA limpa esse
+//    storage -- nao existe setter que zera usingInterception de volta
+//    (so' cresce). Por isso "enableInternet=false, sem export, config
+//    byte-a-byte igual ao phonetic-container" ainda dava
+//    "ContainerProxy is undefined": o CODIGO batia, o ESTADO do DO
+//    "singleton" nao -- phonetic-container nunca usou allowedHosts, entao
+//    nunca gravou essa config. enableInternet em si nunca entra nessa
+//    checagem (conferido no source) -- a teoria "ContainerProxy exigido
+//    por enableInternet, nao so allowedHosts" nao se sustenta.
+// 2. "not running" / "no container instance" -- o texto do proprio erro do
+//    SDK (container.js:874) aponta max_instances (=1 no wrangler.toml)
+//    como causa provavel. Trocar o ID fixo por crypto.randomUUID() por
+//    request (teste de isolamento de hoje) faz CADA request tentar
+//    provisionar uma instancia nova, brigando com o teto de 1 instancia
+//    enquanto a instancia "singleton" antiga ainda podia estar viva
+//    (sleepAfter=30m). Explica por que trocar SO' o ID de DO (mantendo
+//    enableInternet/export "identicos") mudou o erro: ID novo = sem
+//    storage antigo do bug 1, mas caiu direto no bug 2.
+//
+// Fix: ID fixo de novo (nunca randomUUID por request -- reintroduz o bug
+// 2 sempre), mas um literal NOVO (nunca usado antes) pra nascer com
+// storage limpo em vez de reaproveitar "singleton", ja poluido pelo bug 1.
+const SINGLETON_ID = "generation-v1-clean";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -60,10 +92,7 @@ export default {
     }
 
     try {
-      // DIAGNOSTICO TEMPORARIO -- DO novo a cada request, pra isolar se o
-      // "not running" vem de estado acumulado no DO singleton entre os
-      // varios deploys de teste. Ver docs/16, nao e' o estado final.
-      const container = env.GENERATION_CONTAINER.getByName(crypto.randomUUID());
+      const container = env.GENERATION_CONTAINER.getByName(SINGLETON_ID);
       await container.startAndWaitForPorts();
       return await container.fetch(request);
     } catch (err) {
