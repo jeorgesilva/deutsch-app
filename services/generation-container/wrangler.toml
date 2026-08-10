@@ -1,18 +1,42 @@
-# docs/14 -- servico de geracao sob demanda em Cloudflare Containers, mesmo
-# padrao do phonetic-container (Worker normal, nao Pages Functions --
-# Containers exige DO declarada com `main`). UNICA excecao a
-# enableInternet=false do resto do projeto -- ver src/index.ts pro porque
-# e a mitigacao (allowedHosts restrito aos 2 hosts de LLM usados).
+# docs/14/16 -- servico de geracao sob demanda em Cloudflare Containers,
+# mesmo padrao do phonetic-container (Worker normal, nao Pages Functions --
+# Containers exige DO declarada com `main`). enableInternet=true (default do
+# pacote) sem allowedHosts/ContainerProxy -- ver src/index.ts pro achado
+# completo de por que allowedHosts+ContainerProxy quebrou.
 name = "deutsch-generation-service"
 compatibility_date = "2026-07-31"
 main = "src/index.ts"
 
+# achado (docs/16): [observability] precisa vir DEPOIS de todo campo de
+# nivel raiz (main, compatibility_date etc.) -- em TOML, uma vez que
+# [observability] abre, TUDO que vem depois pertence a essa tabela ate o
+# proximo cabecalho [tabela]. Com `main` escrito DEPOIS de [observability]
+# (ordem anterior), wrangler avisava "Unexpected fields found in
+# observability field: main" -- main nunca virou chave de nivel raiz de
+# verdade, o que pode explicar o proprio crash-loop que motivou adicionar
+# observability em primeiro lugar. Sem isso, wrangler tail so' mostra
+# excecao JS do Worker, nunca stdout/stderr do processo Python dentro do
+# container -- exatamente o que faltava pra diagnosticar "not running"/
+# "internal error connecting to the port". Nao mostra stderr da JVM do
+# LanguageTool em si (language_tool_python redireciona pra DEVNULL, ver
+# validation/harness.py) -- so' o que o proprio waitress/Flask/Python
+# imprimir.
+[observability]
+enabled = true
+
 [[containers]]
 class_name = "GenerationContainer"
 image = "./Dockerfile"
-# 1/2 vCPU / 4 GiB / 8 GB disco -- sem torch/wav2vec2 (esse e' o servico
-# fonetico), so spaCy de_core_news_lg + JVM do LanguageTool cabem com folga
-# nesse tamanho menor; ajustar se OOM em uso real.
+# 1/2 vCPU / 4 GiB / 8 GB disco -- previsao original era que spaCy
+# de_core_news_lg + JVM do LanguageTool coubessem com folga; nao confirmado
+# ainda. Candidato concreto pro crash-loop atual (docs/16): sem -Xmx
+# explicito (language_tool_python nao passa nenhum), o heap da JVM se
+# autodimensiona pelo cgroup -- Java 17 (default-jre-headless em bookworm)
+# respeita isso por padrao, entao nao e' o bug classico de JVM pre-Java10
+# ignorando limite de container, mas spaCy+JVM+Python concorrendo ainda pode
+# apertar 4GiB, principalmente se 2 requests overlaparem (waitress usa pool
+# de threads). Testar bump pra standard-2 (1 vCPU/6GiB) e' o jeito mais
+# rapido de confirmar/descartar memoria como causa, sem precisar isolar mais.
 instance_type = "standard-1"
 max_instances = 1
 
