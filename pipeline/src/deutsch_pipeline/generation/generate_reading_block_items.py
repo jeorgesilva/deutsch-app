@@ -110,6 +110,130 @@ def write_item(fields: dict, model: str, exercise_template_id: int, block_id: in
     return exercise_id
 
 
+def generate_one_engine_for_block(
+    block_id: int, engine: str, model: str | None = None, n_items: int = 6,
+    phonetic_point_id: int | None = None, content_topic_id: int | None = None,
+) -> dict:
+    block = load_reading_block(block_id)
+    templates_cache = {row["nome"]: row["id"] for row in query_d1("SELECT id, nome FROM exercise_templates;")}
+    exercise_template_id = templates_cache[engine]
+    ordem = next_ordem(block_id)
+    written, by_reason = 0, {}
+    model_label = model or "mechanical"
+
+    if engine == "ParagraphOrderEngine":
+        fields = prompts_paragraphorder.build_exercise_fields_paragraphorder(block["texto_base"])
+        by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
+        if fields["prompt"]:
+            write_item(fields, model_label, exercise_template_id, block_id, ordem)
+            written += 1
+
+    elif engine == "PunctuationCapsEngine":
+        fields = prompts_punctuationcaps.build_exercise_fields_punctuationcaps(block["texto_base"])
+        by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
+        if fields["prompt"]:
+            write_item(fields, model_label, exercise_template_id, block_id, ordem)
+            written += 1
+
+    elif engine in MECHANICAL_MULTI_ENGINES:
+        items = prompts_letteranagram.build_exercises_letteranagram(block["texto_base"], n_items)
+        for fields in items:
+            by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
+            write_item(fields, model_label, exercise_template_id, block_id, ordem)
+            ordem += 1
+            written += 1
+
+    elif engine == "VowelInsertEngine":
+        if not model or not phonetic_point_id:
+            raise ValueError("model e phonetic_point_id sao obrigatorios pro VowelInsertEngine")
+        pp = query_d1(f"SELECT topico, descricao, exemplo FROM phonetic_points WHERE id = {phonetic_point_id};")[0]
+        user_prompt = prompts_vowelinsert.build_user_prompt(pp["topico"], pp["descricao"], pp["exemplo"], n_items)
+        raw = llm_client.chat(model, prompts_vowelinsert.SYSTEM_PROMPT, user_prompt, temperature=0.7)
+        raw_pairs = extract_json_array(raw)
+        for raw_pair in raw_pairs:
+            for fields in prompts_vowelinsert.build_exercise_fields_vowelinsert_pair(raw_pair):
+                by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
+                if not fields["prompt"]:
+                    continue
+                write_item(fields, model, exercise_template_id, block_id, ordem)
+                ordem += 1
+                written += 1
+
+    elif engine == "CompoundSegmentationEngine":
+        if not model or not content_topic_id:
+            raise ValueError("model e content_topic_id sao obrigatorios pro CompoundSegmentationEngine")
+        ct = query_d1(f"SELECT regra, exemplo FROM content_topics WHERE id = {content_topic_id};")[0]
+        user_prompt = prompts_compoundsegmentation.build_user_prompt(ct["regra"], ct["exemplo"], n_items)
+        raw = llm_client.chat(model, prompts_compoundsegmentation.SYSTEM_PROMPT, user_prompt, temperature=0.7)
+        raw_items = extract_json_array(raw)
+        for raw_item in raw_items:
+            fields = prompts_compoundsegmentation.build_exercise_fields_compoundsegmentation(raw_item)
+            by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
+            if not fields["prompt"]:
+                continue
+            write_item(fields, model, exercise_template_id, block_id, ordem)
+            ordem += 1
+            written += 1
+
+    else:
+        if not model:
+            raise ValueError(f"model e' obrigatorio pro engine {engine}")
+        if engine in SINGLE_ITEM_ENGINES:
+            prompts_module, builder = SINGLE_ITEM_ENGINES[engine]
+        else:
+            prompts_module, builder = MULTI_ITEM_ENGINES[engine]
+
+        user_prompt = prompts_module.build_user_prompt(block["texto_base"], n_items)
+        raw = llm_client.chat(model, prompts_module.SYSTEM_PROMPT, user_prompt, temperature=0.6)
+        raw_items = extract_json_array(raw)
+
+        if engine in SINGLE_ITEM_ENGINES:
+            fields = builder(raw_items, block["texto_base"])
+            by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
+            if fields["prompt"]:
+                write_item(fields, model, exercise_template_id, block_id, ordem)
+                written += 1
+        else:
+            for raw_item in raw_items:
+                fields = builder(raw_item, block["texto_base"])
+                by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
+                if not fields["prompt"]:
+                    continue
+                write_item(fields, model, exercise_template_id, block_id, ordem)
+                ordem += 1
+                written += 1
+
+    return {"written": written, "by_reason": by_reason}
+
+
+# Fase 15 -- batch diario (generation/daily_reading_batch.py) roda os 10
+# engines numa chamada so, sem curadoria humana escolhendo phonetic_point_id/
+# content_topic_id caso a caso (docs/06 original previa isso manual). Pra
+# VowelInsertEngine, o CHAMADOR passa o ponto fonetico (ver daily_reading_batch.py,
+# rotaciona pelos 26 pontos por id do bloco -- sem estado extra); pra
+# CompoundSegmentationEngine, sempre o topico 92 ("Komposita"), unico mapeado
+# a esse engine desde a Fase 5, entao nao ha escolha de verdade a fazer.
+ALL_ENGINES_N_ITEMS = {
+    "MatchingEngine": 8, "TrueFalseEngine": 6, "ComprehensionQAEngine": 6,
+    "PredictThenVerifyEngine": 3, "LetterAnagramEngine": 6, "ParagraphOrderEngine": 1,
+    "BinaryChoiceEngine": 6, "VowelInsertEngine": 3, "PunctuationCapsEngine": 1,
+    "CompoundSegmentationEngine": 4,
+}
+COMPOUND_SEGMENTATION_CONTENT_TOPIC_ID = 92  # "Komposita (Nomen-Nomen, Adjektiv-Nomen etc.)"
+
+
+def generate_all_items_for_block(block_id: int, model: str) -> dict:
+    phonetic_point_id = 1 + (block_id % 26)  # rotaciona pelos 26 pontos fonéticos, sem estado extra
+    results = {}
+    for engine, n_items in ALL_ENGINES_N_ITEMS.items():
+        results[engine] = generate_one_engine_for_block(
+            block_id, engine, model=model, n_items=n_items,
+            phonetic_point_id=phonetic_point_id if engine == "VowelInsertEngine" else None,
+            content_topic_id=COMPOUND_SEGMENTATION_CONTENT_TOPIC_ID if engine == "CompoundSegmentationEngine" else None,
+        )
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reading-block-id", type=int, required=True)
@@ -121,98 +245,12 @@ def main():
     args = parser.parse_args()
 
     block = load_reading_block(args.reading_block_id)
-    templates_cache = {row["nome"]: row["id"] for row in query_d1("SELECT id, nome FROM exercise_templates;")}
-    exercise_template_id = templates_cache[args.engine]
-    ordem = next_ordem(args.reading_block_id)
-    written, by_reason = 0, {}
-    model_label = args.model or "mechanical"
-
-    if args.engine == "ParagraphOrderEngine":
-        fields = prompts_paragraphorder.build_exercise_fields_paragraphorder(block["texto_base"])
-        by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
-        if fields["prompt"]:
-            write_item(fields, model_label, exercise_template_id, args.reading_block_id, ordem)
-            written += 1
-
-    elif args.engine == "PunctuationCapsEngine":
-        fields = prompts_punctuationcaps.build_exercise_fields_punctuationcaps(block["texto_base"])
-        by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
-        if fields["prompt"]:
-            write_item(fields, model_label, exercise_template_id, args.reading_block_id, ordem)
-            written += 1
-
-    elif args.engine in MECHANICAL_MULTI_ENGINES:
-        items = prompts_letteranagram.build_exercises_letteranagram(block["texto_base"], args.n_items)
-        for fields in items:
-            by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
-            write_item(fields, model_label, exercise_template_id, args.reading_block_id, ordem)
-            ordem += 1
-            written += 1
-
-    elif args.engine == "VowelInsertEngine":
-        if not args.model or not args.phonetic_point_id:
-            raise SystemExit("--model e --phonetic-point-id sao obrigatorios pro VowelInsertEngine")
-        pp = query_d1(f"SELECT topico, descricao, exemplo FROM phonetic_points WHERE id = {args.phonetic_point_id};")[0]
-        user_prompt = prompts_vowelinsert.build_user_prompt(pp["topico"], pp["descricao"], pp["exemplo"], args.n_items)
-        raw = llm_client.chat(args.model, prompts_vowelinsert.SYSTEM_PROMPT, user_prompt, temperature=0.7)
-        raw_pairs = extract_json_array(raw)
-        print(f"[VowelInsertEngine] {len(raw_pairs)} pares brutos gerados (ponto '{pp['topico']}')")
-        for raw_pair in raw_pairs:
-            for fields in prompts_vowelinsert.build_exercise_fields_vowelinsert_pair(raw_pair):
-                by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
-                if not fields["prompt"]:
-                    continue
-                write_item(fields, args.model, exercise_template_id, args.reading_block_id, ordem)
-                ordem += 1
-                written += 1
-
-    elif args.engine == "CompoundSegmentationEngine":
-        if not args.model or not args.content_topic_id:
-            raise SystemExit("--model e --content-topic-id sao obrigatorios pro CompoundSegmentationEngine")
-        ct = query_d1(f"SELECT regra, exemplo FROM content_topics WHERE id = {args.content_topic_id};")[0]
-        user_prompt = prompts_compoundsegmentation.build_user_prompt(ct["regra"], ct["exemplo"], args.n_items)
-        raw = llm_client.chat(args.model, prompts_compoundsegmentation.SYSTEM_PROMPT, user_prompt, temperature=0.7)
-        raw_items = extract_json_array(raw)
-        print(f"[CompoundSegmentationEngine] {len(raw_items)} itens brutos gerados")
-        for raw_item in raw_items:
-            fields = prompts_compoundsegmentation.build_exercise_fields_compoundsegmentation(raw_item)
-            by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
-            if not fields["prompt"]:
-                continue
-            write_item(fields, args.model, exercise_template_id, args.reading_block_id, ordem)
-            ordem += 1
-            written += 1
-
-    else:
-        if not args.model:
-            raise SystemExit(f"--model e' obrigatorio pro engine {args.engine}")
-        if args.engine in SINGLE_ITEM_ENGINES:
-            prompts_module, builder = SINGLE_ITEM_ENGINES[args.engine]
-        else:
-            prompts_module, builder = MULTI_ITEM_ENGINES[args.engine]
-
-        user_prompt = prompts_module.build_user_prompt(block["texto_base"], args.n_items)
-        raw = llm_client.chat(args.model, prompts_module.SYSTEM_PROMPT, user_prompt, temperature=0.6)
-        raw_items = extract_json_array(raw)
-        print(f"[{args.engine}] {len(raw_items)} itens brutos gerados pro bloco {args.reading_block_id} ('{block['titulo']}')")
-
-        if args.engine in SINGLE_ITEM_ENGINES:
-            fields = builder(raw_items, block["texto_base"])
-            by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
-            if fields["prompt"]:
-                write_item(fields, args.model, exercise_template_id, args.reading_block_id, ordem)
-                written += 1
-        else:
-            for raw_item in raw_items:
-                fields = builder(raw_item, block["texto_base"])
-                by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
-                if not fields["prompt"]:
-                    continue
-                write_item(fields, args.model, exercise_template_id, args.reading_block_id, ordem)
-                ordem += 1
-                written += 1
-
-    print(f"  -> {written} itens gravados em exercises + reading_block_items -- {by_reason}")
+    print(f"[{args.engine}] gerando pro bloco {args.reading_block_id} ('{block['titulo']}')")
+    result = generate_one_engine_for_block(
+        args.reading_block_id, args.engine, model=args.model, n_items=args.n_items,
+        phonetic_point_id=args.phonetic_point_id, content_topic_id=args.content_topic_id,
+    )
+    print(f"  -> {result['written']} itens gravados em exercises + reading_block_items -- {result['by_reason']}")
 
 
 if __name__ == "__main__":

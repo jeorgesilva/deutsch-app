@@ -7,6 +7,16 @@ name = "deutsch-generation-service"
 compatibility_date = "2026-07-31"
 main = "src/index.ts"
 
+# Fase 15 -- 06:00 no fuso do projeto (CEST, UTC+2 em agosto) = 04:00 UTC,
+# fuso que o Cloudflare Cron Trigger sempre usa. scheduled() em src/index.ts
+# roda o batch diario (10 videos + 10 blocos de leitura). [triggers], igual
+# [observability] logo abaixo, e' uma tabela TOML -- precisa vir ANTES de
+# qualquer outro campo de nivel raiz que ainda falte (nao ha nenhum depois
+# deste ponto no arquivo, entao a ordem aqui e' segura pela mesma regra ja
+# documentada abaixo).
+[triggers]
+crons = ["0 4 * * *"]
+
 # achado (docs/16): [observability] precisa vir DEPOIS de todo campo de
 # nivel raiz (main, compatibility_date etc.) -- em TOML, uma vez que
 # [observability] abre, TUDO que vem depois pertence a essa tabela ate o

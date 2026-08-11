@@ -31,6 +31,8 @@ RUN python -c "import language_tool_python; language_tool_python.LanguageTool('d
 COPY vendor/pipeline/src/deutsch_pipeline/__init__.py /app/pipeline/src/deutsch_pipeline/__init__.py
 COPY vendor/pipeline/src/deutsch_pipeline/generation/ /app/pipeline/src/deutsch_pipeline/generation/
 COPY vendor/pipeline/src/deutsch_pipeline/validation/ /app/pipeline/src/deutsch_pipeline/validation/
+COPY vendor/pipeline/src/deutsch_pipeline/video/ /app/pipeline/src/deutsch_pipeline/video/
+COPY vendor/pipeline/src/deutsch_pipeline/ingest/ /app/pipeline/src/deutsch_pipeline/ingest/
 COPY run.py /app/run.py
 
 ENV PYTHONPATH=/app/pipeline/src

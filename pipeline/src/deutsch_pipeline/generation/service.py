@@ -25,6 +25,7 @@ Uso:
     python -m deutsch_pipeline.generation.service [--port 5006]
 """
 import argparse
+import traceback
 
 from flask import Flask, jsonify, request
 
@@ -35,9 +36,11 @@ from . import prompts_registerreformulation
 from . import prompts_structuraltransform
 from . import prompts_unscramble
 from . import prompts_wordbankguess
+from .daily_reading_batch import create_next_reading_block
 from .model_routing import resolve_model
 from .pilot import build_exercise_fields_gapfill, generate_for_topic
 from .topics import Topic
+from ..video.daily_batch import ingest_next_new_video
 
 app = Flask(__name__)
 
@@ -137,6 +140,38 @@ def generate_topic_endpoint():
         })
 
     return jsonify({"model_used": model_used, "exercises": out, "skipped_count": skipped})
+
+
+# Fase 15 -- geração diária automatizada (vídeo + notícia). Diferente de
+# /generate-topic (D1-blind, o Worker do Pages faz os INSERTs), estes dois
+# escrevem direto no D1 de PRODUÇÃO via HTTP API (ver ingest/write_exercises.py,
+# D1_HTTP_API_TOKEN) -- a orquestração aqui é multi-passo e stateful (ingerir
+# legenda -> gerar 6 exercícios -> ou sourcing de notícia -> gerar bloco -> 10
+# engines), replicar isso como Worker-faz-todos-os-INSERTs duplicaria a lógica
+# inteira em TypeScript; o princípio "Worker é o único escritor" (docs/14) foi
+# desenhado pra 1 chamada de LLM -> poucas linhas, não pra este caso.
+@app.post("/generate-video-item")
+def generate_video_item_endpoint():
+    body = request.get_json(silent=True) or {}
+    model = body.get("model") or "hf:deepseek-ai/DeepSeek-V3"
+    try:
+        result = ingest_next_new_video(model)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"falha ingerindo vídeo: {e}"}), 502
+    return jsonify(result)
+
+
+@app.post("/generate-reading-item")
+def generate_reading_item_endpoint():
+    body = request.get_json(silent=True) or {}
+    model = body.get("model") or "hf:deepseek-ai/DeepSeek-V3"
+    try:
+        result = create_next_reading_block(model)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"falha gerando bloco de leitura: {e}"}), 502
+    return jsonify(result)
 
 
 def main():

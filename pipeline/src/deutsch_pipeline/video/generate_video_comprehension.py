@@ -96,6 +96,50 @@ def write_item(fields: dict, model: str, exercise_template_id: int, video_clip_i
     return exercise_id
 
 
+def generate_one_engine(video_clip_id: int, engine: str, model: str, n_items: int) -> dict:
+    texto_base = build_texto_base(video_clip_id)
+    templates_cache = {row["nome"]: row["id"] for row in query_d1("SELECT id, nome FROM exercise_templates;")}
+    exercise_template_id = templates_cache[engine]
+    written, by_reason = 0, {}
+
+    if engine in SINGLE_ITEM_ENGINES:
+        prompts_module, builder = SINGLE_ITEM_ENGINES[engine]
+    else:
+        prompts_module, builder = MULTI_ITEM_ENGINES[engine]
+
+    user_prompt = prompts_module.build_user_prompt(texto_base, n_items, label=FONTE_LABEL)
+    raw = llm_client.chat(model, prompts_module.SYSTEM_PROMPT, user_prompt, temperature=0.6)
+    raw_items = extract_json_array(raw)
+
+    if engine in SINGLE_ITEM_ENGINES:
+        fields = builder(raw_items, texto_base)
+        by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
+        if fields["prompt"]:
+            write_item(fields, model, exercise_template_id, video_clip_id)
+            written += 1
+    else:
+        for raw_item in raw_items:
+            fields = builder(raw_item, texto_base)
+            by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
+            if not fields["prompt"]:
+                continue
+            write_item(fields, model, exercise_template_id, video_clip_id)
+            written += 1
+
+    return {"written": written, "by_reason": by_reason}
+
+
+def generate_all_comprehension_for_clip(video_clip_id: int, model: str) -> dict:
+    """Roda os 3 engines de compreensao (TrueFalse/ComprehensionQA/Matching)
+    no clipe PAI -- usado pelo batch diario (video/daily_batch.py), mesmos
+    n_items default do CLI (4 pros multi-item, 6 pro Matching)."""
+    n_items_by_engine = {"TrueFalseEngine": 4, "ComprehensionQAEngine": 4, "MatchingEngine": 6}
+    results = {}
+    for engine, n_items in n_items_by_engine.items():
+        results[engine] = generate_one_engine(video_clip_id, engine, model, n_items)
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video-clip-id", type=int, required=True, help="id do clipe PAI (video_clips.start_seconds IS NULL)")
@@ -105,37 +149,9 @@ def main():
     args = parser.parse_args()
 
     clip = load_clip(args.video_clip_id)
-    texto_base = build_texto_base(args.video_clip_id)
-    templates_cache = {row["nome"]: row["id"] for row in query_d1("SELECT id, nome FROM exercise_templates;")}
-    exercise_template_id = templates_cache[args.engine]
-    written, by_reason = 0, {}
-
-    if args.engine in SINGLE_ITEM_ENGINES:
-        prompts_module, builder = SINGLE_ITEM_ENGINES[args.engine]
-    else:
-        prompts_module, builder = MULTI_ITEM_ENGINES[args.engine]
-
-    user_prompt = prompts_module.build_user_prompt(texto_base, args.n_items, label=FONTE_LABEL)
-    raw = llm_client.chat(args.model, prompts_module.SYSTEM_PROMPT, user_prompt, temperature=0.6)
-    raw_items = extract_json_array(raw)
-    print(f"[{args.engine}] {len(raw_items)} itens brutos gerados pro video_clip {args.video_clip_id} ('{clip['fonte']}')")
-
-    if args.engine in SINGLE_ITEM_ENGINES:
-        fields = builder(raw_items, texto_base)
-        by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
-        if fields["prompt"]:
-            write_item(fields, args.model, exercise_template_id, args.video_clip_id)
-            written += 1
-    else:
-        for raw_item in raw_items:
-            fields = builder(raw_item, texto_base)
-            by_reason[fields["flag_reason"]] = by_reason.get(fields["flag_reason"], 0) + 1
-            if not fields["prompt"]:
-                continue
-            write_item(fields, args.model, exercise_template_id, args.video_clip_id)
-            written += 1
-
-    print(f"  -> {written} itens gravados em exercises (video_clip_id={args.video_clip_id}) -- {by_reason}")
+    print(f"[{args.engine}] gerando pro video_clip {args.video_clip_id} ('{clip['fonte']}')")
+    result = generate_one_engine(args.video_clip_id, args.engine, args.model, args.n_items)
+    print(f"  -> {result['written']} itens gravados em exercises (video_clip_id={args.video_clip_id}) -- {result['by_reason']}")
 
 
 if __name__ == "__main__":

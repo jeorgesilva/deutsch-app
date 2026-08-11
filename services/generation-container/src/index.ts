@@ -28,9 +28,20 @@ export class GenerationContainer extends Container<Env> {
     // é o mesmo nome do secret do Worker (HUGGINGFACE_API_KEY), que segue a
     // convenção normal de secret do Cloudflare. Errar essa tradução faz a
     // chamada falhar silenciosamente com KeyError dentro do container.
+    //
+    // Fase 15 (batch diario) -- D1_HTTP_API_TOKEN e' o nome EXATO que
+    // ingest/write_exercises.py le via os.environ pra escrever direto no D1
+    // de PRODUÇÃO via HTTP API (não há `wrangler` CLI dentro do container,
+    // Python puro -- ver o comentário longo em write_exercises.py pro
+    // porquê). Token precisa de permissão "D1 Edit" no Cloudflare, escopado
+    // à conta -- CRIADO PELO USUÁRIO via dashboard (não dá pra mintar um
+    // token de API a partir da sessão OAuth do `wrangler login` local, as
+    // duas coisas são mecanismos diferentes) e setado com
+    // `wrangler secret put CLOUDFLARE_API_TOKEN` neste diretório.
     this.envVars = {
       GEMINI_API_KEY: env.GEMINI_API_KEY ?? "",
       hugging_face_api_key: env.HUGGINGFACE_API_KEY ?? "",
+      D1_HTTP_API_TOKEN: env.CLOUDFLARE_API_TOKEN ?? "",
     };
   }
 }
@@ -40,6 +51,7 @@ interface Env {
   GENERATION_SHARED_SECRET: string;
   GEMINI_API_KEY?: string;
   HUGGINGFACE_API_KEY?: string;
+  CLOUDFLARE_API_TOKEN?: string;
 }
 
 // ACHADO REAL (nao flakiness de plataforma beta -- confirmado lendo
@@ -78,6 +90,71 @@ interface Env {
 // 2 sempre), mas um literal NOVO (nunca usado antes) pra nascer com
 // storage limpo em vez de reaproveitar "singleton", ja poluido pelo bug 1.
 const SINGLETON_ID = "generation-v1-clean";
+const DAILY_TARGET_PER_TYPE = 10;
+const DEFAULT_MODEL = "hf:deepseek-ai/DeepSeek-V3";
+
+async function getReadyContainer(env: Env) {
+  const container = env.GENERATION_CONTAINER.getByName(SINGLETON_ID);
+  await container.startAndWaitForPorts();
+  return container;
+}
+
+// Chamada INTERNA container -> container.fetch, nunca passa pelo Bearer
+// (esse só protege a borda pública do Worker, ver fetch() abaixo) -- mesmo
+// padrão de "endpoint interno" que /generate-topic já não precisava
+// reautenticar por dentro.
+async function callContainerJson(
+  container: Awaited<ReturnType<typeof getReadyContainer>>,
+  path: string,
+  body: unknown
+): Promise<any> {
+  const req = new Request(`http://container${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const resp = await container.fetch(req);
+  const data = (await resp.json()) as any;
+  if (!resp.ok) throw new Error(data?.error ?? `HTTP ${resp.status}`);
+  return data;
+}
+
+// Fase 15 -- 10 vídeos novos + 10 blocos de notícia novos por dia (docs/16
+// nunca previu isso, decisão posterior do usuário). Cada item é UMA chamada
+// HTTP curta e autocontida (o container decide sozinho qual é o "próximo"
+// item, consultando o D1 -- ver video/daily_batch.py e
+// generation/daily_reading_batch.py); loop sequencial aqui em vez de N
+// chamadas em paralelo de propósito -- mantém cada request individual curta
+// (evita depender de quão longo um único fetch/scheduled pode durar) e dá
+// isolamento de falha por item sem esforço extra (item 7 falhando não
+// derruba 1-6, mesmo espírito do checkpoint por tópico de generate_batch.py).
+async function runDailyBatch(env: Env): Promise<{ video: any[]; reading: any[] }> {
+  const container = await getReadyContainer(env);
+  const video: any[] = [];
+  const reading: any[] = [];
+
+  for (let i = 0; i < DAILY_TARGET_PER_TYPE; i++) {
+    try {
+      const result = await callContainerJson(container, "/generate-video-item", { model: DEFAULT_MODEL });
+      video.push(result);
+      if (result.skipped) break; // playlist esgotada dentro da janela de duração -- parar de tentar
+    } catch (err) {
+      video.push({ error: (err as Error).message });
+    }
+  }
+
+  for (let i = 0; i < DAILY_TARGET_PER_TYPE; i++) {
+    try {
+      const result = await callContainerJson(container, "/generate-reading-item", { model: DEFAULT_MODEL });
+      reading.push(result);
+      if (result.skipped) break; // feed da DW sem artigo novo -- parar de tentar
+    } catch (err) {
+      reading.push({ error: (err as Error).message });
+    }
+  }
+
+  return { video, reading };
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -91,9 +168,21 @@ export default {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
 
+    // Gatilho manual -- mesma função que o cron (scheduled(), abaixo) chama
+    // sozinho às 6h. Existe pra testar o batch ponta a ponta sob demanda
+    // (curl) sem esperar o cron disparar, e pra rodar o primeiro lote do dia
+    // em que isso foi ligado.
+    if (url.pathname === "/run-daily-batch") {
+      try {
+        const result = await runDailyBatch(env);
+        return Response.json(result);
+      } catch (err) {
+        return Response.json({ error: `daily batch error: ${(err as Error).message}` }, { status: 502 });
+      }
+    }
+
     try {
-      const container = env.GENERATION_CONTAINER.getByName(SINGLETON_ID);
-      await container.startAndWaitForPorts();
+      const container = await getReadyContainer(env);
       return await container.fetch(request);
     } catch (err) {
       // nunca deixar isso virar a pagina generica "error code: 1101" do
@@ -106,5 +195,15 @@ export default {
         { status: 502 }
       );
     }
+  },
+
+  // 06:00 CEST = 04:00 UTC (ver [triggers] em wrangler.toml) -- 10 vídeos +
+  // 10 notícias novos por dia, sem confirmação/curadoria humana (decisão do
+  // usuário, ver video/daily_batch.py e generation/reading_sources.py pro
+  // raciocínio de cada fonte). waitUntil segura o Worker vivo além do fim
+  // síncrono do evento -- necessário porque o batch inteiro (até 20 chamadas
+  // sequenciais, cada uma com I/O de LLM/yt-dlp) passa fácil de 1 minuto.
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runDailyBatch(env));
   },
 };

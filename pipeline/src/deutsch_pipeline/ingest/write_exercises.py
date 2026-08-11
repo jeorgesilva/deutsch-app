@@ -11,6 +11,7 @@ Uso:
 """
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -25,18 +26,51 @@ TEMPLATE_NAME_TO_ENGINE = {
     "Completar lacunas com a regência correta": "GapFillGovernanceEngine",
 }
 
+# Fase 15 (geração diária automatizada, vídeo+notícia) -- dentro de
+# services/generation-container/ não existe `wrangler` CLI (container Python
+# puro, sem Node), então esse é o único jeito de um processo rodando lá
+# escrever no D1 de PRODUÇÃO: D1 HTTP API direta (api.cloudflare.com),
+# autenticada por um token de API escopado a D1 Edit (nunca a mesma sessão
+# OAuth do `wrangler login` local -- essa não é exportável/portável). Fora do
+# container (uso local/CI de sempre), D1_HTTP_API_TOKEN nunca está setado e o
+# comportamento antigo (wrangler CLI, --local por padrão, --remote se
+# D1_REMOTE=1 -- mesmo padrão já usado em lexicon/link_exercise_lexicon.py)
+# continua idêntico, zero mudança de comportamento pros scripts existentes.
+D1_ACCOUNT_ID = "2c5bff092c0408bc767cf746472a84ed"
+D1_DATABASE_ID = "38bafa99-fe7f-415f-804b-139bf444b918"
+
+
+def _d1_http_query(sql: str) -> list[dict]:
+    import requests
+
+    token = os.environ["D1_HTTP_API_TOKEN"]
+    url = f"https://api.cloudflare.com/client/v4/accounts/{D1_ACCOUNT_ID}/d1/database/{D1_DATABASE_ID}/query"
+    resp = requests.post(url, headers={"Authorization": f"Bearer {token}"}, json={"sql": sql}, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not data.get("success"):
+        raise RuntimeError(f"D1 HTTP API error: {data.get('errors')}")
+    return data["result"][0]["results"]
+
 
 def query_d1(sql: str) -> list[dict]:
+    if os.environ.get("D1_HTTP_API_TOKEN"):
+        return _d1_http_query(sql)
+    d1_target = "--remote" if os.environ.get("D1_REMOTE") else "--local"
     result = subprocess.run(
-        ["npx", "wrangler", "d1", "execute", "deutsch-db", "--local", "--json", "--command", sql],
+        ["npx", "wrangler", "d1", "execute", "deutsch-db", d1_target, "--json", "--command", sql],
         cwd=APP_DIR, capture_output=True, text=True, check=True,
     )
     return json.loads(result.stdout)[0]["results"]
 
 
 def execute_d1(sql: str) -> None:
+    if os.environ.get("D1_HTTP_API_TOKEN"):
+        _d1_http_query(sql)
+        return
+    d1_target = "--remote" if os.environ.get("D1_REMOTE") else "--local"
     subprocess.run(
-        ["npx", "wrangler", "d1", "execute", "deutsch-db", "--local", "--command", sql],
+        ["npx", "wrangler", "d1", "execute", "deutsch-db", d1_target, "--command", sql],
         cwd=APP_DIR, capture_output=True, text=True, check=True,
     )
 

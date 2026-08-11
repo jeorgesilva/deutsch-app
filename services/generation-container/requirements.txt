@@ -10,3 +10,10 @@ language-tool-python
 google-genai
 openai
 python-dotenv
+# Fase 15 (batch diario) -- yt-dlp baixa so' legenda (skip_download=True,
+# nunca video/ffmpeg); requests e' usado direto (D1 HTTP API em
+# ingest/write_exercises.py, RSS da DW em generation/reading_sources.py) --
+# antes so' entrava de forma implicita via alguma dependencia transitiva de
+# openai/google-genai, nunca declarado.
+yt-dlp
+requests
