@@ -732,7 +732,12 @@ async function renderReadingBlock(id) {
   `;
 
   session = block.items.map((item) => item.exercise);
-  index = 0;
+  // Retoma do primeiro item ainda não tentado (attempts já existe por
+  // exercício, só não era consultado aqui) -- achado real: sair do bloco e
+  // voltar sempre reiniciava do zero, mesmo com respostas já dadas.
+  // Se todos já foram tentados, cai em 0 (revisão, não há "próximo" real).
+  const firstUnattempted = block.items.findIndex((item) => !item.attempted);
+  index = firstUnattempted === -1 ? 0 : firstUnattempted;
   sessionEmptyState = { backLabel: "Leitura", onBack: renderReadingHub };
   sessionProgressHook = renderBlockProgressDots;
 
@@ -814,7 +819,9 @@ async function renderVideoBlock(url) {
   blockContextEl.innerHTML = `<div class="block-progress-row" id="block-progress-row"></div>`;
 
   session = group.items.map((item) => item.exercise);
-  index = 0;
+  // Mesmo retomar-do-ponto-onde-parou do bloco de Leitura, ver comentário lá.
+  const firstUnattempted = group.items.findIndex((item) => !item.attempted);
+  index = firstUnattempted === -1 ? 0 : firstUnattempted;
   sessionEmptyState = { backLabel: "Vídeo", onBack: renderVideoHub };
   sessionProgressHook = renderBlockProgressDots;
 
@@ -2085,6 +2092,7 @@ function renderTextInput(ex) {
   main.innerHTML = `
     <div class="card">
       <span class="template-label">${templateLabel(ex.template)}</span>
+      ${videoWrapHtml(ex)}
       <p class="prompt">${escapeHtml(ex.prompt)}</p>
       <input type="text" class="text-input" id="answer" autocomplete="off"
              ${placeholder ? `placeholder="${escapeHtml(placeholder)}"` : ""} autofocus />
@@ -2104,19 +2112,24 @@ function renderTextInput(ex) {
 
 // ---------- escolha por chip (banco de palavras, par binario, previsao) ----------
 
+// ex.video_url só vem preenchido quando o exercício está ancorado a um
+// video_clip (VideoTaskEngine "citar", ou os engines de compreensão
+// reaproveitados do bloco de leitura -- TrueFalseEngine/ComprehensionQAEngine/
+// MatchingEngine -- quando servidos via o hub de Vídeo, Fatia B do redesenho
+// pedagógico). Chamadores que nunca têm vídeo (WordBankGuessEngine, os
+// mesmos 3 engines quando vêm do bloco de Leitura) ficam sem mudança nenhuma.
+function videoWrapHtml(ex) {
+  return ex.video_url
+    ? `<div class="video-wrap"><iframe src="${youtubeEmbedUrl(ex)}" title="vídeo"
+          frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div>`
+    : "";
+}
+
 function renderChipChoice(ex) {
   const data = JSON.parse(ex.prompt);
   const context = data.prompt_gapped ?? data.trecho_gapped ?? data.trecho_inicial;
   const options = data.word_bank ?? data.opcoes;
-  // Fatia A (redesenho de Video) -- "citar" (VideoTaskEngine, reconhecimento
-  // por parafrase) reaproveita este mesmo componente, so' com um video em
-  // cima do prompt. ex.video_url so vem preenchido nesse caso -- os outros
-  // chamadores (WordBankGuessEngine/PredictThenVerifyEngine) nunca tem
-  // video_url, entao ficam sem mudanca nenhuma.
-  const videoHtml = ex.video_url
-    ? `<div class="video-wrap"><iframe src="${youtubeEmbedUrl(ex)}" title="vídeo"
-          frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div>`
-    : "";
+  const videoHtml = videoWrapHtml(ex);
   main.innerHTML = `
     <div class="card">
       <span class="template-label">${templateLabel(ex.template)}</span>
@@ -2210,6 +2223,7 @@ function renderTrueFalse(ex) {
   main.innerHTML = `
     <div class="card">
       <span class="template-label">${templateLabel(ex.template)}</span>
+      ${videoWrapHtml(ex)}
       <p class="prompt">${escapeHtml(ex.prompt)}</p>
       <div class="chips">
         <button class="chip" id="true-btn" type="button">Verdadeiro</button>
@@ -2241,6 +2255,7 @@ function renderMatching(ex) {
   main.innerHTML = `
     <div class="card">
       <span class="template-label">${templateLabel(ex.template)}</span>
+      ${videoWrapHtml(ex)}
       <div class="chips" id="termos-col"></div>
       <div class="chips" id="def-col"></div>
       <div class="assembly" id="pairs"></div>
