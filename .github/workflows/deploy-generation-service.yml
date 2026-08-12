@@ -10,6 +10,15 @@ on:
     branches: [main]
     paths:
       - "services/generation-container/**"
+      # Fase 15, achado real: um bug em pipeline/ (import de nível de módulo
+      # que crashava o container no boot, nunca detectado porque o path
+      # filter só olhava services/generation-container/**) só foi corrigido
+      # de fato depois de um `workflow_dispatch` manual -- o filtro original
+      # nunca dispara redeploy quando só o código VENDORIZADO (não o
+      # Dockerfile/vendor script em si) muda. Sem isso, um fix em pipeline/
+      # fica commitado mas nunca chega no container até alguém lembrar de
+      # rodar o workflow manualmente.
+      - "pipeline/src/deutsch_pipeline/**"
   workflow_dispatch: {}
 
 jobs:

@@ -9,6 +9,9 @@ on:
     branches: [main]
     paths:
       - "services/phonetic-container/**"
+      # mesmo achado do deploy-generation-service.yml (Fase 15): mudança em
+      # código VENDORIZADO de pipeline/ não disparava redeploy sozinha.
+      - "pipeline/src/deutsch_pipeline/**"
   workflow_dispatch: {}
 
 jobs:
