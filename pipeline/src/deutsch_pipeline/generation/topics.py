@@ -8,8 +8,6 @@ geracao (docs/02, "Exemplo concreto"). Nada aqui inventa regra gramatical nova.
 from dataclasses import dataclass
 from pathlib import Path
 
-import pandas as pd
-
 RAW_XLSX = Path(__file__).resolve().parents[4] / "data" / "raw" / "Planilha_Gramatica_Alema_B2C1.xlsx"
 
 # Topicos selecionados pelo nome exato da coluna "Topico Gramatical" na planilha.
@@ -41,6 +39,14 @@ class Topic:
 
 
 def load_pilot_topics(xlsx_path: Path = RAW_XLSX) -> list[Topic]:
+    # import preguiçoso -- só esta função (piloto standalone da Fase 0) usa
+    # pandas; Topic/expected_case não precisam dele, e o container de geração
+    # sob demanda (service.py) importa este módulo só pelo dataclass Topic,
+    # nunca chama load_pilot_topics -- pandas nunca esteve no requirements.txt
+    # do container, e um import de nível de módulo crashava o processo inteiro
+    # no boot (achado real rodando o container pela primeira vez de verdade).
+    import pandas as pd
+
     df = pd.read_excel(xlsx_path)
     topics = []
     for idx, row in df.iterrows():
