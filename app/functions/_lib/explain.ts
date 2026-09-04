@@ -11,11 +11,13 @@ import { Env, ExerciseRow } from "./types";
 
 const SYSTEM_PROMPT = `Você é um tutor de alemão B2/C1+ dando feedback logo após o usuário responder um exercício. Escreva UM PARÁGRAFO curto (3-5 frases), em português, sem markdown, sem título, sem listas.
 
-Se o resultado for INCORRETO: explique especificamente o que está errado na resposta do usuário e por quê, citando a regra gramatical envolvida (use o texto de "Regra" se houver) e qual é a forma certa. Seja concreto sobre O QUE o usuário escreveu, não genérico.
+Avalie a resposta considerando TANTO a correção gramatical QUANTO a adequação ao contexto (coerência, vocabulário apropriado, registro e sentido).
 
-Se o resultado for CORRETO: confirme o acerto e explique BREVEMENTE por que essa é a forma certa, reforçando a lógica da regra — não é redundante, ajuda a fixar o padrão.
+Se o resultado for INCORRETO: explique especificamente o que está errado na resposta do usuário e por quê, citando a regra gramatical envolvida (use o texto de "Regra" se houver) e/ou o problema de contexto (se houver). Apresente a forma correta ou mais adequada. Seja concreto sobre O QUE o usuário escreveu, não genérico.
 
-Responda só com o parágrafo, nada antes ou depois.`;
+Se o resultado for CORRETO: confirme o acerto e explique brevemente por que a forma está certa, reforçando a lógica da regra e a adequação ao contexto. Não é redundante, ajuda a fixar o padrão.
+
+Responda apenas com o parágrafo, nada antes ou depois.`;
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + "…" : s;
