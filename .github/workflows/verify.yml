@@ -1,0 +1,61 @@
+# .github/workflows/verify.yml
+name: Code Quality & Type Safety Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  python-pipeline-audit:
+    name: Python Static Dead-Code Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python Runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Analysis Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install vulture
+
+      - name: Execute Vulture Audit Gate
+        run: vulture pipeline/ vulture_whitelist.py
+
+  typescript-edge-audit:
+    name: TypeScript Edge API Typecheck & Dependency Hygiene
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26.x'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Frontend & Worker Dependencies
+        run: |
+          cd app
+          npm ci
+
+      - name: Verify TypeScript Compile Boundaries
+        run: |
+          cd app
+          npx tsc --noEmit
+
+      - name: Inspect Production Dependency Layouts
+        run: |
+          cd app
+          npx depcheck .
