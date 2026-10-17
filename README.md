@@ -1,4 +1,130 @@
 # App de Alemao B2/C1+ (uso pessoal)
+## 🏗️ System Architecture & Data Flow
+
+```mermaid
+graph TD
+    %% Global Styling
+    classDef edgeStyle stroke:#333,stroke-width:2px;
+    classDef userStyle fill:#f9f9f9,stroke:#333,stroke-width:2px;
+    classDef workerStyle fill:#CFE2F3,stroke:#0b5394,stroke-width:2px;
+    classDef containerStyle fill:#D9EAD3,stroke:#274e13,stroke-width:2px;
+    classDef storageStyle fill:#FFF2CC,stroke:#b45f06,stroke-width:2px;
+    classDef offlineStyle fill:#EFEFEF,stroke:#666,stroke-dasharray: 5 5;
+
+    %% Client Layer
+    User((User Browser)):::userStyle
+
+    %% Edge Runtime Tier
+    subgraph Cloudflare Edge Infrastructure
+        Worker[Cloudflare Pages Functions<br>Edge API TypeScript]:::workerStyle
+        D1[(Cloudflare D1<br>SQLite Native DB)]:::storageStyle
+        R2[(Cloudflare R2<br>Blob Audio Storage)]:::storageStyle
+    end
+
+    %% Decoupled Microservices
+    subgraph Autonomous Compute Containers
+        PhoneticService[Phonetic Container<br>Flask / Waitress WSGI]:::containerStyle
+        GenerationService[Generation Container<br>Flask / Waitress WSGI]:::containerStyle
+    end
+
+    %% Data Sourcing Pipeline
+    subgraph Offline Pipeline & PromptOps
+        Ingest[Seed Scripts<br>Excel Ingestion]:::offlineStyle
+        ValHarness[Validation Harness<br>LanguageTool / spaCy]:::offlineStyle
+        PromptRegistry[Prompt Registry<br>YAML Few-Shot Rules]:::offlineStyle
+    end
+
+    %% End-to-End Interconnections
+    User <-- HTTPS / Session --> Worker
+    Worker <-- SQL Queries --> D1
+    Worker <-- Stream Audio --> R2
+    
+    %% Compute Delegations
+    Worker -- "POST /score-readaloud<br>(Base64 WebM/Opus Audio)" --> PhoneticService
+    Worker -- "POST /generate-topic<br>(On-Demand Drill Trigger)" --> GenerationService
+    
+    %% Container Internal Logic
+    PhoneticService -- "1. FFmpeg to 16kHz WAV<br>2. PyTorch Wav2Vec2 / Whisper<br>3. Phonemizer alignment" --> PhoneticService
+    GenerationService -- "1. Router decides LLM Key<br>2. Evaluates spaCy/LanguageTool" --> GenerationService
+    GenerationService -- "Direct Write<br>via D1 HTTP API" --> D1
+
+    %% Core Schema Mappings
+    Ingest --> PromptRegistry
+    PromptRegistry --> ValHarness
+    ValHarness -- "Seeds content_topics<br>& servable_exercises" --> D1
+```
+
+### 🗄️ Database Entity-Relationship Diagram (ERD)
+
+To visualize how your database handles multi-user states, FSRS repetition loops, and semantic references, paste this **Database ERD** into your **`README.md`** right below the architecture section:
+
+```markdown
+### 📊 Database Relationships (Schema Schema)
+
+```mermaid
+erDiagram
+    users ||--o{ attempts : "records"
+    users ||--o{ progress : "owns"
+    users ||--o{ session_plans : "schedules"
+    users ||--o{ roleplay_sessions : "engages"
+    users ||--o{ video_mining_notes : "creates"
+
+    exercise_templates ||--o{ exercises : "governs layout"
+    content_topics ||--o{ exercises : "contextualizes"
+    phonetic_points ||--o{ exercises : "contextualizes"
+    video_clips ||--o{ exercises : "anchors video drills"
+    
+    exercises ||--o{ attempts : "tracks submissions"
+    exercises ||--o{ progress : "accumulates memory data"
+    exercises ||--o{ exercise_lexicon_refs : "contains tokens"
+    lexicon ||--o{ exercise_lexicon_refs : "mapped to"
+
+    reading_blocks ||--o{ reading_block_items : "groups"
+    exercises ||--o{ reading_block_items : "assigned to block"
+
+    roleplay_sessions ||--o{ roleplay_messages : "contains turn history"
+
+    attempts {
+        int id PK
+        int user_id FK
+        int exercise_id FK
+        text user_response
+        text audio_ref
+        int showed_up
+        text correction_json
+        int correct
+    }
+
+    progress {
+        int id PK
+        int user_id FK
+        int exercise_id FK
+        float stability "FSRS value"
+        float difficulty "FSRS value"
+        text next_review_at
+        int reps
+    }
+
+    lexicon {
+        int id PK
+        text lemma
+        text pos "Substantiv/Verb/etc."
+        text source "video_mining/derived"
+    }
+```
+```
+
+---
+
+### 💡 The Tech Lead Pitch For Your Portfolio
+Once you commit these diagrams into your `README.md`, you can speak confidently in technical interviews like this:
+> *"I designed the application boundaries around the physical limitations of serverless environments. Cloudflare Workers handle global entry routing, basic static validation, and sub-millisecond FSRS space-repetition logic. Because PyTorch, raw FFmpeg file conversions, and language validation models break Worker isolate bounds, I containerised them into dedicated Python Waitress WSGI services. The architecture utilizes decoupled sync states, allowing the Core Worker to hold global multi-user transactional records, while asynchronous container tasks speak natively via REST APIs."*
+
+<FollowUp>
+Now that your architectural roadmap is permanently documented, what should we tackle to ready this for your portfolio?
+1. We can write a automated **GitHub Actions Workflow (`.github/workflows/verify-pipeline.yml`)** that verifies code formatting and runs your new vulture/depcheck whitelists on push.
+2. We can build the **PromptOps folder structure** and refactor your system prompts into modular configuration files.
+</FollowUp>
 
 Comece lendo `CLAUDE.md` — e o resumo executivo de todas as decisoes ja tomadas.
 Para o raciocinio completo por tras de cada decisao, ver `docs/`:
