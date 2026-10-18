@@ -36,4 +36,6 @@ jobs:
 
       - run: npx wrangler deploy
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Keep both deploy workflows aligned: prefer a dedicated token with
+          # Containers deploy scopes, fallback to legacy name for compatibility.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
