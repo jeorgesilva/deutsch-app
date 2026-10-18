@@ -1,7 +1,11 @@
 description: "AI Alignment Validation - VowelInsertEngine Matrix"
 
 prompts:
-  - "Create exactly 2 German phonetic minimal pairs for B2/C1 learners focusing on: {{ponto_topico}}. Description: {{ponto_descricao}}. Anchor example: {{ponto_exemplo}}. Output strict JSON array only with fields: palavra_1, palavra_2, frase_1, frase_2."
+  - |
+    Create exactly 2 German phonetic minimal pairs for B2/C1 learners focusing on: {{ponto_topico}}. 
+    Description: {{ponto_descricao}}. 
+    Anchor example: {{ponto_exemplo}}. 
+    Output strict JSON array only with fields: palavra_1, palavra_2, frase_1, frase_2.
 
 providers:
   - id: huggingface:chat:deepseek-ai/DeepSeek-V3
