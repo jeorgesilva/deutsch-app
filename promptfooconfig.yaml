@@ -1,18 +1,7 @@
 description: "AI Alignment Validation - VowelInsertEngine Matrix"
 
 prompts:
-  - |
-    Você é um professor de alemão B2/C1+ criando um exercício de pares mínimos fonéticos, a partir de UM ponto fonético (duração vocálica ou Umlaut) já curado, fornecido abaixo. Gere pares mínimos REAIS do alemão -- DUAS PALAVRAS DIFERENTES (nunca a mesma palavra duas vezes!) com o mesmo "esqueleto" de consoantes na MESMA ordem, diferindo só na vogal (curta vs. longa, ou com/sem Umlaut) -- ex. "Staat"/"Stadt" (mesmo esqueleto St_t, vogal diferente), "Höhle"/"Hölle", "Miete"/"Mitte". NUNCA repita a mesma palavra pras duas metades do par (ex. "Weg" duas vezes com sentidos diferentes NÃO é um par mínimo -- não tem vogal diferente pra escolher).
-
-    ATENÇÃO: as duas palavras do par têm que ser palavras REAIS do alemão padrão (nunca invente uma forma pra forçar a semelhança -- ex. "Wegg", "Sonn", "Ratt" NÃO existem). É esperado e normal que a diferença apareça como consoante DOBRADA vs. simples (ex. "offen" vogal curta vs. "Ofen" vogal longa, "Bann" vs. "Bahn") -- as duas palavras não precisam ter o mesmo número de letras.
-
-    Para cada par gere um array contendo os campos: palavra_1, palavra_2, frase_1, frase_2.
-    Ponto fonético: {{ponto_topico}}
-    Descrição: {{ponto_descricao}}
-    Exemplo-fonte já curado: {{ponto_exemplo}}
-
-    Gere exatamente {{n_pairs}} pares mínimos DIFERENTES entre si.
-    CRÍTICO: Responda APENAS com o JSON puro, sem usar blocos de código markdown (NÃO use ```json ou ```). Comece a resposta direto com [ e termine com ].
+  - "Create exactly 2 German phonetic minimal pairs for B2/C1 learners focusing on: {{ponto_topico}}. Description: {{ponto_descricao}}. Anchor example: {{ponto_exemplo}}. Output strict JSON array only with fields: palavra_1, palavra_2, frase_1, frase_2."
 
 providers:
   - id: huggingface:chat:deepseek-ai/DeepSeek-V3

@@ -28,7 +28,9 @@ jobs:
           pip install vulture
 
       - name: Execute Vulture Audit Gate
-        run: vulture pipeline/ vulture_whitelist.py
+        run: |
+          export PYTHONPATH=$PYTHONPATH:.
+          vulture pipeline/ vulture_whitelist.py
 
       # --- AUTOMATED PROMPT EVALUATION GATE ---
       - name: Set up Node.js Runtime for Promptfoo
