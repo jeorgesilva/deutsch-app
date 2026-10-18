@@ -6,6 +6,8 @@ import pipeline.src.deutsch_pipeline.generation.service as gen_service
 import pipeline.src.deutsch_pipeline.phonetics.service as phon_service
 import pipeline.src.deutsch_pipeline.generation.prompts_reading_block as prompts_rb
 import pipeline.src.deutsch_pipeline.validation.export_review_queue as review_q
+import pipeline.src.deutsch_pipeline.generation.schemas as pipeline_schemas
+
 
 # 1. Microservice API Endpoints (Invoked dynamically over HTTP via Edge Workers)
 gen_service.health
@@ -25,7 +27,10 @@ prompts_rb.ReadingBlockDraft
 # 3. Third-party Worksheet Attribute Assignments
 review_q.freeze_panes
 EOF
-import pipeline.src.deutsch_pipeline.generation.schemas as pipeline_schemas
-
 pipeline_schemas.FillBlankItem
 pipeline_schemas.FillBlankBatchResponse
+
+pipeline_schemas.UnscrambleItem.sentence_ordered
+pipeline_schemas.UnscrambleItem.words_scrambled
+pipeline_schemas.UnscrambleItem.clue_translation
+

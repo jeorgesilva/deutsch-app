@@ -20,3 +20,20 @@ class FillBlankBatchResponse(BaseModel):
         ..., 
         description="A precise list of uniquely distinct generated exercise blocks matching the calibration matrix."
     )
+
+class UnscrambleItem(BaseModel):
+    sentence_ordered: str = Field(
+        ..., 
+        description="The correct, fully formed German B2/C1 sentence."
+    )
+    words_scrambled: list[str] = Field(
+        ..., 
+        description="The exact words from sentence_ordered broken down into an array and explicitly shuffled in a randomized, incorrect order."
+    )
+    clue_translation: str = Field(
+        ..., 
+        description="A clear contextual translation or grammatical clue in Portuguese to assist the student."
+    )
+
+class UnscrambleBatchResponse(BaseModel):
+    exercises: list[UnscrambleItem] = Field(..., description="List of generated unscramble exercises.")

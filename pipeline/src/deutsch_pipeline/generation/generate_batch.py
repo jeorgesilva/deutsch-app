@@ -44,12 +44,15 @@ from . import prompts_wordbankguess
 from .model_routing import resolve_model
 from .pilot import build_exercise_fields_gapfill, generate_for_topic
 from .topics import Topic
+from . import prompts_wordbankguess
+from .model_routing import resolve_model
+from .pilot import build_exercise_fields_gapfill, generate_for_topic
+from .topics import Topic
+from .import schemas 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 OUTPUT_DIR = REPO_ROOT / "pipeline" / "output" / "batch"
 
-# Registro dos templates do Grupo A com geracao propria -- adicionar aqui
-# conforme os outros templates ganharem seu prompts_<nome>.py (docs/05).
 ENGINE_PROMPTS = {
     "GapFillGovernanceEngine": gapfill_prompts,
     "FillBlankEngine": fillblank_prompts,
@@ -64,13 +67,19 @@ TEMPLATE_NAME_TO_ENGINE = {mod.TEMPLATE_NAME: name for name, mod in ENGINE_PROMP
 # (sentence_full + gap_answer) -- exportam seu proprio
 # build_exercise_fields_<nome> e entram aqui pra generate_for_topic_chunked
 # usar no lugar do default (pilot.build_exercise_fields_gapfill).
+ENGINE_SCHEMAS = {
+    "GapFillGovernanceEngine": schemas.FillBlankBatchResponse,
+    "FillBlankEngine": schemas.FillBlankBatchResponse,
+    "UnscrambleEngine": schemas.UnscrambleBatchResponse,
+    # Adicione os fallbacks ou novos schemas conforme implementar o Grupo A completo
+}
+
 EXERCISE_FIELD_BUILDERS = {
     "UnscrambleEngine": prompts_unscramble.build_exercise_fields_unscramble,
     "StructuralTransformEngine": prompts_structuraltransform.build_exercise_fields_structuraltransform,
     "RegisterReformulationEngine": prompts_registerreformulation.build_exercise_fields_structuraltransform,
     "WordBankGuessEngine": prompts_wordbankguess.build_exercise_fields_wordbankguess,
 }
-
 
 def load_topics(engine_name: str, topic_ids: list[int] | None = None) -> list[Topic]:
     where_extra = ""
@@ -103,13 +112,16 @@ def already_generated_topic_ids(model: str) -> set[str]:
 
 
 def generate_for_topic_chunked(
-    model: str, topic: Topic, n_total: int, items_per_call: int, prompts_module,
+    model: str, topic: Topic, n_total: int, items_per_call: int, prompts_module, engine_name: str,
     exercise_field_builder=build_exercise_fields_gapfill,
 ) -> list[dict]:
-    """Fatia n_total em chamadas de ate items_per_call -- completion menor,
-    mais chamadas. Renumera variation pra nao colidir entre fatias."""
+    """Fatia n_total em chamadas de até items_per_call.
+    Injeta o contrato Pydantic dinamicamente para garantir as Saídas Estruturadas nativas.
+    """
     exercises = []
     remaining = n_total
+    schema_class = ENGINE_SCHEMAS.get(engine_name)
+
     while remaining > 0:
         chunk_n = min(items_per_call, remaining)
         chunk = generate_for_topic(
@@ -118,6 +130,8 @@ def generate_for_topic_chunked(
             template_name=prompts_module.TEMPLATE_NAME,
             user_prompt_builder=prompts_module.build_user_prompt,
             exercise_field_builder=exercise_field_builder,
+            # Se o modelo for hf: ou gemini, o pilot usará esse contrato nativamente!
+            schema_class=schema_class if hasattr(generate_for_topic, "__code__") else None 
         )
         offset = len(exercises)
         for i, ex in enumerate(chunk, start=1):
