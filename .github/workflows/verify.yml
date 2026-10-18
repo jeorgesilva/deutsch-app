@@ -1,5 +1,5 @@
 # .github/workflows/verify.yml
-name: Code Quality & Type Safety Verification
+name: Code Quality, Type Safety & LLMOps Verification
 
 on:
   push:
@@ -8,8 +8,8 @@ on:
     branches: [ main ]
 
 jobs:
-  python-pipeline-audit:
-    name: Python Static Dead-Code Analysis
+  python-and-llmops-audit:
+    name: Python Static Audit & LLMOps Prompt Validation
     runs-on: ubuntu-latest
 
     steps:
@@ -29,6 +29,18 @@ jobs:
 
       - name: Execute Vulture Audit Gate
         run: vulture pipeline/ vulture_whitelist.py
+
+      # --- AUTOMATED PROMPT EVALUATION GATE ---
+      - name: Set up Node.js Runtime for Promptfoo
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26.x'
+
+      - name: Run Automated LLMOps Evaluation Sweep
+        run: npx promptfoo eval --no-cache
+        env:
+          # Securely binding your Hugging Face Pro token from GitHub Repository Secrets
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
   typescript-edge-audit:
     name: TypeScript Edge API Typecheck & Dependency Hygiene
