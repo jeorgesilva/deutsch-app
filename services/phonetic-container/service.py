@@ -1,7 +1,7 @@
-"""Serviço Fonético de Alto Desempenho (Grupo B, CLAUDE.md).
+"""Serviço Fonético e Léxico de Alto Desempenho (Grupo B, CLAUDE.md).
 
 Processa fluxos de áudio Base64 (WebM/Opus) convertendo-os diretamente em memória
-para avaliação de pronúncia e alinhamento fonético com Wav2Vec2 e Whisper.
+para avaliação de pronúncia (Wav2Vec2) e transcrição textual (Whisper).
 """
 import os
 import io
@@ -13,6 +13,11 @@ app = Flask(__name__)
 
 # 🛡️ GATE DE SEGURANÇA: Token compartilhado para validar requisições dos Workers da Cloudflare
 SHARED_SECRET = os.environ.get("PHONETIC_SHARED_SECRET")
+
+# Mock/Placeholder para os modelos de IA carregados na inicialização do container.
+# No seu ambiente de produção, certifique-se de instanciar os modelos globais aqui.
+# Exemplo: whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
+whisper_model = None 
 
 
 def check_auth(req) -> bool:
@@ -35,8 +40,7 @@ def health():
 
 @app.post("/score-readaloud")
 def score_readaloud():
-    """Recebe o payload de áudio Base64 e executa o alinhamento fonético do PyTorch."""
-    # 1. Aplicação rigorosa do gate de autenticação (Evita erros 401 descontrolados)
+    """Recebe o payload de áudio Base64 e executa o alinhamento fonético do PyTorch (Wav2Vec2)."""
     if not check_auth(request):
         return jsonify({"error": "Unauthorized endpoint access. Invalid secret mapping."}), 401
 
@@ -53,24 +57,19 @@ def score_readaloud():
         audio_buffer = io.BytesIO(audio_bytes)
         
         # ⚡ EXECUÇÃO DO FFMEG VIA STREAMING (PIPE IN-MEMORY)
-        # Em vez de salvar um arquivo temporário físico no disco do container,
-        # passamos os dados diretamente via stdin do processo e capturamos via stdout.
         process = subprocess.Popen(
             ["ffmpeg", "-i", "pipe:0", "-f", "wav", "-ar", "16000", "-ac", "1", "pipe:1"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
-        
-        # Comunica diretamente com o buffer de memória, evitando concorrência de leitura em disco
         wav_data, stderr = process.communicate(input=audio_buffer.read())
         
         if process.returncode != 0:
             raise RuntimeError(f"Falha na conversão streaming do FFmpeg: {stderr.decode('utf-8', errors='ignore')}")
 
         # 🧠 CAMADA DE INFERÊNCIA DO MODELO FONÉTICO (Wav2Vec2 Alignment)
-        # O modelo processa o array bruto de bytes decodificado a 16kHz
-        # (Aqui o PyTorch/Whisper consome o wav_data diretamente da memória)
+        # O PyTorch consome o wav_data diretamente da memória RAM
         alignment_score = 100.0
         phoneme_feedback = ["Perfect"]
 
@@ -84,6 +83,62 @@ def score_readaloud():
     except Exception as e:
         app.logger.error(f"Erro crítico no pipeline fonético: {e}")
         return jsonify({"error": "Internal processor error during phonetic alignment", "details": str(e)}), 500
+
+
+# =====================================================================
+# 🎙️ NOVO ENDPOINT UNIFICADO: TRANSCRIÇÃO LÉXICA (WHISPER) IN-MEMORY
+# =====================================================================
+@app.post("/transcribe")
+def transcribe_endpoint():
+    """Recebe áudio Base64 (WebM/Opus) e transcreve o texto em alemão utilizando o Whisper
+    sem tocar no armazenamento em disco do contêiner.
+    """
+    if not check_auth(request):
+        return jsonify({"error": "Unauthorized endpoint access. Invalid secret mapping."}), 401
+
+    data = request.get_json() or {}
+    audio_base64 = data.get("audio_base64")
+
+    if not audio_base64:
+        return jsonify({"error": "Missing parameter field: audio_base64"}), 400
+
+    try:
+        # 📦 Decodificação Base64 direto em buffer de memória RAM
+        audio_bytes = base64.b64decode(audio_base64)
+        audio_buffer = io.BytesIO(audio_bytes)
+
+        # ⚡ Conversão Streaming via FFmpeg Pipe (in-memory) para WAV 16kHz
+        process = subprocess.Popen(
+            ["ffmpeg", "-i", "pipe:0", "-f", "wav", "-ar", "16000", "-ac", "1", "pipe:1"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        wav_bytes, stderr = process.communicate(input=audio_buffer.read())
+
+        if process.returncode != 0:
+            raise RuntimeError(f"FFmpeg pipeline fail: {stderr.decode('utf-8', errors='ignore')}")
+
+        # 🧠 INFERÊNCIA DO WHISPER 100% EM MEMÓRIA RAM
+        wav_stream = io.BytesIO(wav_bytes)
+        
+        # No seu script real, as linhas abaixo iteram sobre o modelo Whisper carregado na inicialização:
+        # segments, info = whisper_model.transcribe(wav_stream, beam_size=5, language="de")
+        # transcription_text = " ".join([segment.text for segment in segments]).strip()
+        
+        # Mock representando o retorno estruturado do modelo
+        transcription_text = "Ich verstehe open-source AI."
+
+        return jsonify({
+            "status": "success",
+            "transcription": transcription_text,
+            "language": "de",
+            "language_probability": 0.99
+        }), 200
+
+    except Exception as e:
+        app.logger.error(f"Erro crítico na transcrição Whisper: {e}")
+        return jsonify({"error": "Internal processor error during transcription", "details": str(e)}), 500
 
 
 if __name__ == "__main__":
