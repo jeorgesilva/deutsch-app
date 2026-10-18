@@ -43,4 +43,8 @@ jobs:
 
       - run: npx wrangler deploy
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Root cause (run 39108874844): token in CLOUDFLARE_API_TOKEN lacked
+          # permissions for /accounts/*/containers/* (403 Forbidden).
+          # Prefer a dedicated deploy token when configured, fallback keeps
+          # backwards compatibility with existing setups.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
