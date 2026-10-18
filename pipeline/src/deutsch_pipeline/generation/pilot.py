@@ -1,17 +1,8 @@
-"""Piloto de decisao do motor de geracao (Fase 0, CLAUDE.md).
+"""Piloto de decisão do motor de geração (Fase 0, CLAUDE.md).
 
-Gera exercicios do template "Completar lacunas com a regencia correta" (Grupo A)
-para os 4 topicos de regencia selecionados em topics.py, contra um modelo Ollama
-local, usando regra+exemplo da planilha como few-shot (nunca inventa a regra).
-
-Uso:
-    python -m deutsch_pipeline.generation.pilot --model mistral-small --n-per-topic 5
-    python -m deutsch_pipeline.generation.pilot --model deepseek-r1-multi-7b --n-per-topic 5
-
-Saida: pipeline/output/piloto/<model>.json -- lista de exercicios no formato
-docs/02 "Exemplo concreto" (topic/template/variation/prompt/accepted_answers/
-source_rule/generated_by/validation_status), mais sentence_full (frase completa,
-usada depois pela validacao do LanguageTool).
+Gera exercicios do template "Completar lacunas com a regência correta" (Grupo A)
+para os tópicos de regência selecionados em topics.py, suportando tanto
+Structured Outputs via Pydantic quanto pós-processamento determinístico via Regex.
 """
 import argparse
 import json
@@ -21,6 +12,7 @@ import time
 from pathlib import Path
 
 from . import llm_client
+from .schemas import FillBlankBatchResponse  # 📦 Import do nosso novo contrato de dados
 from .prompts import SYSTEM_PROMPT, TEMPLATE_NAME, build_user_prompt
 from .topics import load_pilot_topics
 
@@ -30,8 +22,8 @@ JSON_ARRAY_RE = re.compile(r"\[.*\]", re.DOTALL)
 
 
 def extract_json_array(raw: str) -> list[dict]:
-    """O modelo as vezes envolve o JSON em ```json ... ``` ou adiciona texto solto
-    antes/depois apesar da instrucao. Extrai o primeiro array JSON valido."""
+    """O modelo às vezes envolve o JSON em ```json ... ``` ou adiciona texto solto
+    antes/depois apesar da instrução. Extrai o primeiro array JSON válido."""
     raw = raw.strip()
     try:
         return json.loads(raw)
@@ -44,10 +36,9 @@ def extract_json_array(raw: str) -> list[dict]:
 
 
 def build_prompt_gapped(sentence_full: str, gap_answer: str) -> str | None:
-    """Corta gap_answer de dentro de sentence_full pra montar a lacuna --
+    """Corta gap_answer de dentro de sentence_full para montar a lacuna --
     mecanicamente, nunca autorado pelo LLM como string separada (ver prompts.py).
-    Retorna None se gap_answer nao aparece literalmente em sentence_full: isso
-    e o gate estrutural que a auditoria da Fase 0 mostrou estar ausente."""
+    Retorna None se gap_answer não aparece literalmente em sentence_full."""
     if not sentence_full or not gap_answer:
         return None
     idx = sentence_full.find(gap_answer)
@@ -57,12 +48,9 @@ def build_prompt_gapped(sentence_full: str, gap_answer: str) -> str | None:
 
 
 def build_exercise_fields_gapfill(item: dict, topic) -> dict:
-    """Contrato padrao (GapFillGovernanceEngine/FillBlankEngine): LLM autora
-    sentence_full + gap_answer, o programa carva o prompt mecanicamente
-    (build_prompt_gapped). Extraido do corpo antigo de generate_for_topic pra
-    virar o default de exercise_field_builder -- outros templates do Grupo A
-    (ex. UnscrambleEngine, generation/prompts_unscramble.py) que nao tem
-    lacuna passam um builder proprio sem tocar neste."""
+    """Contrato padrão (GapFillGovernanceEngine/FillBlankEngine): LLM autora
+    sentence_full + gap_answer, o programa cava o prompt mecanicamente.
+    """
     sentence_full = item.get("sentence_full")
     gap_answer = item.get("gap_answer")
     prompt_gapped = build_prompt_gapped(sentence_full, gap_answer)
@@ -88,29 +76,48 @@ def generate_for_topic(
     exercise_field_builder=build_exercise_fields_gapfill,
     max_retries: int = 2,
 ) -> list[dict]:
-    """Parametrizado por prompt (system_prompt/template_name/user_prompt_builder)
-    em vez de hardcoded no import -- generaliza pra qualquer template do Grupo A,
-    nao so GapFillGovernanceEngine. exercise_field_builder decide como os campos
-    prompt/gap_answer/accepted_answers/flag_reason saem do item bruto do LLM --
-    default preserva o contrato de lacuna (sentence_full + gap_answer); templates
-    sem lacuna (ex. UnscrambleEngine) passam um builder proprio. Defaults
-    preservam o comportamento antigo (piloto da Fase 0) pra quem chama sem
-    passar esses argumentos."""
+    """Parametrizado por prompt. Detecta automaticamente se o modelo suporta
+    Structured Outputs nativos (Pydantic) ou se precisa cair no fallback de Regex.
+    """
     user_prompt = user_prompt_builder(topic, n_items)
     last_error = None
+    
+    # 🔍 FEATURE DETECTION: Identifica se o modelo possui suporte a Saídas Estruturadas
+    use_structured = (
+        model.startswith("hf:") or 
+        model.startswith("gemini") or 
+        model.startswith("gemma") or 
+        model.startswith("azure:")
+    )
+
     for attempt in range(1, max_retries + 2):
-        raw = llm_client.chat(model, system_prompt, user_prompt, temperature=0.7)
         try:
-            items = extract_json_array(raw)
+            if use_structured:
+                # 🛡️ CAMINHO PRO: Execução segura com garantia de esquema via Pydantic
+                structured_data = llm_client.chat_structured(
+                    model=model,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    schema_class=FillBlankBatchResponse,
+                    temperature=0.4
+                )
+                items = structured_data["exercises"]
+            else:
+                # 🔄 CAMINHO FALLBACK: Texto livre + pós-processamento por Regex (Ollama, Claude, etc.)
+                raw = llm_client.chat(model, system_prompt, user_prompt, temperature=0.7)
+                items = extract_json_array(raw)
+            
+            # Validação sanitária estrutural mínima do array
             not_dicts = [type(x).__name__ for x in items if not isinstance(x, dict)]
             if not_dicts:
-                raise ValueError(f"array JSON valido mas com itens que nao sao objetos: {not_dicts}")
+                raise ValueError(f"Array JSON válido mas com itens que não são objetos: {not_dicts}")
             break
-        except (ValueError, json.JSONDecodeError) as e:
+            
+        except Exception as e:
             last_error = e
-            print(f"  [retry {attempt}] falha ao parsear JSON: {e}", file=sys.stderr)
+            print(f"  [retry {attempt}] falha na geração/validação estrutural: {e}", file=sys.stderr)
     else:
-        raise RuntimeError(f"Falhou apos {max_retries + 1} tentativas: {last_error}")
+        raise RuntimeError(f"Falhou após {max_retries + 1} tentativas: {last_error}")
 
     exercises = []
     for i, item in enumerate(items, start=1):
@@ -134,7 +141,7 @@ def generate_for_topic(
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", required=True, help="Nome do modelo Ollama (ex.: mistral-small)")
+    parser.add_argument("--model", required=True, help="Nome do modelo (ex.: hf:deepseek-ai/DeepSeek-V3 ou mistral-small)")
     parser.add_argument("--n-per-topic", type=int, default=5)
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()

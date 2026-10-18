@@ -25,3 +25,7 @@ prompts_rb.ReadingBlockDraft
 # 3. Third-party Worksheet Attribute Assignments
 review_q.freeze_panes
 EOF
+import pipeline.src.deutsch_pipeline.generation.schemas as pipeline_schemas
+
+pipeline_schemas.FillBlankItem
+pipeline_schemas.FillBlankBatchResponse
