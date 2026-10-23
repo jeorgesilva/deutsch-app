@@ -23,8 +23,10 @@ docs/           planejamento, decisões, mockups/
 
 ## Comandos
 
+- `scripts/verify.sh` — gate local: tsc, vitest (`--passWithNoTests`), ruff `--select F` em `pipeline/`, pytest. Exit ≠ 0 se qualquer passo falhar.
 - `cd app && npx tsc --noEmit` — passa.
-- `cd app && npm test` (vitest) — falha hoje: não há arquivo de teste. Também não há testes Python.
+- `cd app && npm test` (vitest) — falha hoje: não há arquivo de teste TS (o script não passa `--passWithNoTests`; o `verify.sh` passa).
+- `.venv/bin/python -m pytest pipeline -q` — testes do pipeline. `pipeline/tests/conftest.py` bloqueia rede (inclusive localhost), subprocess e variáveis de API/D1; teste novo mocka a função de alto nível, nunca afrouxa a guarda.
 - Não há Makefile.
 - Pipeline (não instalado como pacote): `PYTHONPATH=pipeline/src .venv/bin/python -m deutsch_pipeline.<pkg>.<mod>`, a partir da raiz.
 - `cd app && npm run dev` — exige `app/.dev.vars` (gitignored, não existe no checkout).
