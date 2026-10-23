@@ -75,6 +75,7 @@ def generate_for_topic(
     user_prompt_builder=build_user_prompt,
     exercise_field_builder=build_exercise_fields_gapfill,
     max_retries: int = 2,
+    schema_class=None,
 ) -> list[dict]:
     """Parametrizado por prompt. Detecta automaticamente se o modelo suporta
     Structured Outputs nativos (Pydantic) ou se precisa cair no fallback de Regex.
