@@ -15,3 +15,6 @@ pipeline/output/
 pipeline/models/
 openai.json
 recordings/
+
+# notas locais, nunca versionar
+projeto_completo.txt
