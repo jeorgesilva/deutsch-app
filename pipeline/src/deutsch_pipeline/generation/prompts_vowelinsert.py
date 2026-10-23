@@ -17,7 +17,6 @@ derivado MECANICAMENTE da palavra completa que o LLM forneceu (mesmo
 princípio de "o programa deriva, o LLM só varia" do resto do projeto),
 então esqueleto e resposta NUNCA podem divergir.
 """
-import re
 
 TEMPLATE_NAME = "Insert The Vowels (pares mínimos fonéticos)"
 

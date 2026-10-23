@@ -44,10 +44,6 @@ from . import prompts_wordbankguess
 from .model_routing import resolve_model
 from .pilot import build_exercise_fields_gapfill, generate_for_topic
 from .topics import Topic
-from . import prompts_wordbankguess
-from .model_routing import resolve_model
-from .pilot import build_exercise_fields_gapfill, generate_for_topic
-from .topics import Topic
 from .import schemas 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
