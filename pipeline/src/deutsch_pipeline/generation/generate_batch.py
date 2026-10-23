@@ -195,7 +195,12 @@ def main():
         print(f"[{topic.id}] Gerando {args.n_per_topic} itens para '{topic.topico}' (em blocos de {args.items_per_call})...")
         t0 = time.time()
         exercises = generate_for_topic_chunked(
-            model_for_topic, topic, args.n_per_topic, args.items_per_call, prompts_module,
+            model=args.model,
+            topic=topic,
+            n_total=args.n_per_topic,
+            items_per_call=args.items_per_call,
+            prompts_module=prompts_module,
+            engine_name=args.engine, 
             exercise_field_builder=exercise_field_builder,
         )
         print(f"  -> {len(exercises)} itens em {time.time() - t0:.1f}s -- validando e gravando...")
