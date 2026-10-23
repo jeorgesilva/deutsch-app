@@ -10,7 +10,7 @@
 
 - `.env` é carregado da **raiz do repo** (dotenv).
 - `chat(model, system, user)` roteia por prefixo: `azure:` → Azure OpenAI, `hf:` → Hugging Face, `publicai:` → Public AI, `gemini*`/`gemma*` → Gemini, `claude*` → Anthropic, qualquer outro → Ollama local.
-- `chat_structured(model, system, user, schema_class)` (Pydantic v2) aceita **só** `azure:`, `hf:`, `gemini*`/`gemma*`; os demais levantam `ValueError`. As duas listas de prefixo são diferentes de propósito — ao adicionar provedor, atualizar ambas.
+- `chat_structured(model, system, user, schema_class)` (Pydantic v2) aceita **só** `azure:`, `hf:`, `gemini*`/`gemma*`; os demais levantam `ValueError`. As duas listas de prefixo são diferentes — ao adicionar provedor, atualizar ambas.
 - `pilot.generate_for_topic` escolhe `chat_structured` (temperatura 0.4) para os prefixos suportados e `chat` + `extract_json_array` (0.7) para o resto.
 - Variáveis de ambiente (nomes e qual delas cada caminho lê): `.env.example` na raiz.
 

@@ -23,7 +23,7 @@ docs/           planejamento, decisões, mockups/
 
 ## Comandos
 
-- `cd app && npx tsc --noEmit` — passa; é o único gate que bloqueia de fato.
+- `cd app && npx tsc --noEmit` — passa.
 - `cd app && npm test` (vitest) — falha hoje: não há arquivo de teste. Também não há testes Python.
 - Não há Makefile.
 - Pipeline (não instalado como pacote): `PYTHONPATH=pipeline/src .venv/bin/python -m deutsch_pipeline.<pkg>.<mod>`, a partir da raiz.
