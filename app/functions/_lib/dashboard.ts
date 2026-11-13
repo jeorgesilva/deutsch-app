@@ -240,7 +240,12 @@ export async function getWordOfTheDay(db: D1Database, userId: number): Promise<W
        FROM lexicon l
        JOIN exercise_lexicon_refs elr ON elr.lexicon_id = l.id
        JOIN attempts a ON a.exercise_id = elr.exercise_id
-       JOIN exercises e ON e.id = elr.exercise_id
+       -- fix(known-issues #4): era "JOIN exercises e" direto -- deixava
+       -- exercicio em quarentena (flagged/rejected/pending) aparecer como
+       -- "palavra do dia" com prompt/accepted_answers expostos. servable_exercises
+       -- (app/migrations/0004_review_workflow.sql) e' SELECT * FROM exercises
+       -- WHERE validation_status IN ('auto_ok','human_reviewed'), mesmas colunas.
+       JOIN servable_exercises e ON e.id = elr.exercise_id
        JOIN exercise_templates et ON et.id = e.exercise_template_id
        JOIN reading_block_items rbi ON rbi.exercise_id = elr.exercise_id
        WHERE a.user_id = ? AND a.correct = 0

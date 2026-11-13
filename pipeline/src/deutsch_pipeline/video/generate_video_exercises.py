@@ -27,7 +27,6 @@ Uso:
     python -m deutsch_pipeline.video.generate_video_exercises --video-clip-id 1 --engine dictation --n-items 3
 """
 import argparse
-import json
 import random
 
 from . import prompts_video_citar

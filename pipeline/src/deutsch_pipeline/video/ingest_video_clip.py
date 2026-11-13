@@ -10,7 +10,6 @@ Uso:
         --fonte "DW Das Video-Thema" --content-topic-id 62
 """
 import argparse
-import subprocess
 import tempfile
 from pathlib import Path
 

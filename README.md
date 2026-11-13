@@ -1,9 +1,7 @@
-# 🇩🇪 Intelligent B2/C1+ German Learning Platform
-[![AI Engineering](https://shields.io)](#)
-[![Stack](https://shields.io)](#)
-[![LLMOps](https://shields.io)](#)
+# 🇩🇪 B2/C1+ German Learning Platform
+[![Verify](https://github.com/jeorgesilva/deutsch-app/actions/workflows/verify.yml/badge.svg)](https://github.com/jeorgesilva/deutsch-app/actions/workflows/verify.yml)
 
-An enterprise-ready, decoupled, and highly cost-optimized platform for advanced German language acquisition (B2/C1+), tailored to accommodate users with ADHD and social anxiety via specific behavioral psychology evidence. 
+A personal, decoupled platform for advanced German language acquisition (B2/C1+), designed around specific behavioral-psychology constraints (ADHD-friendly session structure, low-pressure feedback) documented in `docs/03-fundamentacao-comportamental.md`. Built and iterated solo, with heavy use of Claude Code under an explicit phase/approval-gate workflow (see `CLAUDE.md`) and a self-audit log (`docs/known-issues.md`, `docs/17-auditoria-projeto.md`) kept honest on purpose: findings get fixed and moved to a "Resolvido" section, not hidden. 
 
 The application utilizes an intelligent combination of **Serverless Edge Runtimes**, **Decoupled Python Compute Microservices**, **FinOps-driven LLM Routing**, and a **Strict Deterministic Validation Harness**.
 

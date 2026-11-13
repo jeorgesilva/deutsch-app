@@ -11,7 +11,7 @@
     "db:seed:remote": "wrangler d1 execute deutsch-db --remote --file=migrations/0002_seed_content.sql",
     "db:seed-templates:local": "wrangler d1 execute deutsch-db --local --file=migrations/0003_seed_topic_template_map.sql",
     "db:seed-templates:remote": "wrangler d1 execute deutsch-db --remote --file=migrations/0003_seed_topic_template_map.sql",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260804.1",
@@ -21,5 +21,11 @@
   },
   "dependencies": {
     "ts-fsrs": "^4"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true,
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true,
+    "workerd@1.20260801.1": true
   }
 }

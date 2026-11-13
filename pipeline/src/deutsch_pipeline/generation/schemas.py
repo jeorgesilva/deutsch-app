@@ -37,3 +37,30 @@ class UnscrambleItem(BaseModel):
 
 class UnscrambleBatchResponse(BaseModel):
     exercises: list[UnscrambleItem] = Field(..., description="List of generated unscramble exercises.")
+
+
+class StructuralTransformItem(BaseModel):
+    sentence_a: str = Field(
+        ...,
+        description="German B2/C1 sentence in the source form (the form the student reads)."
+    )
+    sentence_b: str = Field(
+        ...,
+        description="The same sentence rewritten in the target form (the transformation the student must produce)."
+    )
+
+class StructuralTransformBatchResponse(BaseModel):
+    exercises: list[StructuralTransformItem] = Field(
+        ..., description="List of generated sentence_a/sentence_b transformation pairs."
+    )
+
+class WordBankGuessItem(FillBlankItem):
+    distractors: list[str] = Field(
+        ...,
+        description="Exactly 2 plausible but incorrect options for the same gap, same grammatical category as gap_answer."
+    )
+
+class WordBankGuessBatchResponse(BaseModel):
+    exercises: list[WordBankGuessItem] = Field(
+        ..., description="List of generated gap-fill exercises with a closed word bank (correct answer + distractors)."
+    )

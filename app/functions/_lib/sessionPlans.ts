@@ -18,7 +18,10 @@ export async function listActivePlans(db: D1Database, userId: number): Promise<S
     if (existing) return existing;
     // sentinel: id=0 sinaliza "sem plano ativo ainda pra este escopo" --
     // frontend usa isso pra decidir se mostra o botao "concluido".
-    return { id: 0, scope, when_text: null, where_text: null, scheduled_for: null, completed_at: null };
+    return {
+      id: 0, scope, when_text: null, where_text: null, scheduled_for: null, completed_at: null,
+      theme_text: null, target_vocabulary: null, exercise_id: null,
+    };
   });
 }
 
