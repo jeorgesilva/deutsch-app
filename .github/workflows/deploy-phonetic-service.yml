@@ -34,8 +34,36 @@ jobs:
       # buildar (ver prepare-vendor.sh).
       - run: ./prepare-vendor.sh
 
-      - run: npx wrangler deploy
+      - name: Deploy with first valid Cloudflare token
         env:
-          # Keep both deploy workflows aligned: prefer a dedicated token with
-          # Containers deploy scopes, fallback to legacy name for compatibility.
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          # Try both secret names in sequence because one can become stale or
+          # lose Containers permissions independently.
+          DEPLOY_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          LEGACY_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          try_deploy() {
+            local token="$1"
+            local label="$2"
+            if [ -z "$token" ]; then
+              return 1
+            fi
+            echo "Attempting deploy with ${label}..."
+            if CLOUDFLARE_API_TOKEN="$token" npx wrangler deploy; then
+              echo "Deploy succeeded with ${label}."
+              return 0
+            fi
+            return 1
+          }
+
+          if try_deploy "$DEPLOY_TOKEN" "CLOUDFLARE_DEPLOY_API_TOKEN"; then
+            exit 0
+          fi
+
+          if try_deploy "$LEGACY_TOKEN" "CLOUDFLARE_API_TOKEN"; then
+            exit 0
+          fi
+
+          echo "Deploy failed with both configured Cloudflare tokens."
+          exit 1
