@@ -16,7 +16,7 @@
 
 ## Geração
 
-- Engine novo do Grupo A: `generation/prompts_<engine>.py` (`SYSTEM_PROMPT`, `TEMPLATE_NAME`, `build_user_prompt`, opcionalmente um builder de campos) e registro em `generate_batch.py` (`ENGINE_PROMPTS`, `EXERCISE_FIELD_BUILDERS`, `ENGINE_SCHEMAS`) e, se o container precisar, em `services/generation-container/prepare-vendor.sh`.
+- Engine novo do Grupo A: `generation/prompts_<engine>.py` (`SYSTEM_PROMPT`, `TEMPLATE_NAME`, `build_user_prompt`, opcionalmente um builder de campos) e registro em `generate_batch.py` (`ENGINE_PROMPTS`, `EXERCISE_FIELD_BUILDERS`, `ENGINE_SCHEMAS`) e, se o container precisar, em `services/generation-container/vendor-files.txt` (o `test_vendor_manifest.py` acusa se faltar).
 - O LLM autora `sentence_full` + `gap_answer`; o programa recorta o prompt com lacuna (`build_prompt_gapped`). Nunca pedir ao LLM duas strings independentes que precisem bater.
 - `model_routing.resolve_model` força o modelo mais forte em tópicos de Dativo fixo e `Funktionsverbgefüge` (aplicado pelo container; ver `docs/known-issues.md` para o CLI).
 - Quando um gate mecânico novo for proposto, testar contra dados reais antes de travá-lo — gate mal calibrado já empurrou o modelo a inventar palavras.

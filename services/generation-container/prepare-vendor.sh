@@ -21,35 +21,11 @@ SRC="$REPO_ROOT/pipeline/src/deutsch_pipeline"
 DEST="vendor/pipeline/src/deutsch_pipeline"
 
 rm -rf vendor
-mkdir -p "$DEST/generation" "$DEST/validation" "$DEST/video" "$DEST/ingest"
-
-cp "$SRC/__init__.py" "$DEST/__init__.py"
-
-for f in __init__.py llm_client.py model_routing.py topics.py pilot.py schemas.py service.py \
-         prompts.py prompts_fillblank.py prompts_unscramble.py \
-         prompts_structuraltransform.py prompts_registerreformulation.py \
-         prompts_wordbankguess.py \
-         prompts_binarychoice.py prompts_compoundsegmentation.py \
-         prompts_comprehensionqa.py prompts_letteranagram.py prompts_matching.py \
-         prompts_paragraphorder.py prompts_predictverify.py \
-         prompts_punctuationcaps.py prompts_reading_block.py prompts_truefalse.py \
-         prompts_vowelinsert.py reading_sources.py generate_reading_block.py \
-         generate_reading_block_items.py daily_reading_batch.py; do
-  cp "$SRC/generation/$f" "$DEST/generation/$f"
-done
-
-for f in __init__.py harness.py rule_adherence.py; do
-  cp "$SRC/validation/$f" "$DEST/validation/$f"
-done
-
-for f in __init__.py channels.py list_candidates.py ingest_video_clip.py \
-         generate_video_exercises.py generate_video_comprehension.py \
-         prompts_video_citar.py vtt_parser.py daily_batch.py; do
-  cp "$SRC/video/$f" "$DEST/video/$f"
-done
-
-for f in __init__.py write_exercises.py; do
-  cp "$SRC/ingest/$f" "$DEST/ingest/$f"
+# Lista de arquivos em vendor-files.txt (fonte única, conferida por
+# pipeline/tests/test_vendor_manifest.py contra os imports reais).
+grep -vE '^[[:space:]]*(#|$)' vendor-files.txt | while read -r f; do
+  mkdir -p "$DEST/$(dirname "$f")"
+  cp "$SRC/$f" "$DEST/$f"
 done
 
 echo "vendorizado em $(pwd)/vendor"

@@ -1,0 +1,49 @@
+# Arquivos de pipeline/src/deutsch_pipeline/ que prepare-vendor.sh copia
+# para vendor/ (um por linha, relativo a deutsch_pipeline/). Fonte única:
+# lida pelo script e por pipeline/tests/test_vendor_manifest.py, que segue
+# os imports de generation/service.py e falha se algum módulo alcançado não
+# estiver aqui (o crash de boot de 18/10/2026: schemas.py faltando).
+# Pasta nova aqui também precisa de COPY no Dockerfile (o teste confere).
+__init__.py
+generation/__init__.py
+generation/daily_reading_batch.py
+generation/generate_reading_block.py
+generation/generate_reading_block_items.py
+generation/llm_client.py
+generation/model_routing.py
+generation/pilot.py
+generation/prompts.py
+generation/prompts_binarychoice.py
+generation/prompts_compoundsegmentation.py
+generation/prompts_comprehensionqa.py
+generation/prompts_fillblank.py
+generation/prompts_letteranagram.py
+generation/prompts_matching.py
+generation/prompts_paragraphorder.py
+generation/prompts_predictverify.py
+generation/prompts_punctuationcaps.py
+generation/prompts_reading_block.py
+generation/prompts_registerreformulation.py
+generation/prompts_structuraltransform.py
+generation/prompts_truefalse.py
+generation/prompts_unscramble.py
+generation/prompts_vowelinsert.py
+generation/prompts_wordbankguess.py
+generation/reading_sources.py
+generation/schemas.py
+generation/service.py
+generation/topics.py
+ingest/__init__.py
+ingest/write_exercises.py
+validation/__init__.py
+validation/harness.py
+validation/rule_adherence.py
+video/__init__.py
+video/channels.py
+video/daily_batch.py
+video/generate_video_comprehension.py
+video/generate_video_exercises.py
+video/ingest_video_clip.py
+video/list_candidates.py
+video/prompts_video_citar.py
+video/vtt_parser.py
