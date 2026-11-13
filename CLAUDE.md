@@ -2,7 +2,7 @@
 
 App pessoal de alemão B2/C1+ construído sobre 3 planilhas curadas (`data/raw/`, não editar). O design comportamental é estrutural e deriva de necessidades específicas do usuário, documentadas em `docs/03-fundamentacao-comportamental.md` — não é UX opcional.
 
-Contexto por diretório: `app/CLAUDE.md`, `pipeline/CLAUDE.md`, `services/CLAUDE.md`. Arquitetura e "onde mexer": `docs/architecture.md`. Bugs conhecidos: `docs/known-issues.md`. Problemas do wrangler local: `docs/local-dev-troubleshooting.md`. Histórico de decisões: `docs/18-historico-decisoes.md`. Spec das engines: `docs/05-engines-por-exercicio.xlsx`.
+Contexto por diretório: `app/CLAUDE.md`, `pipeline/CLAUDE.md`, `services/CLAUDE.md`. Arquitetura e "onde mexer": `docs/architecture.md`. Bugs conhecidos: `docs/known-issues.md`. Problemas do wrangler local: `docs/local-dev-troubleshooting.md`. Histórico de decisões: `docs/18-historico-decisoes.md`. Plano de follow-up em andamento (fases, estado, fatos já confirmados): `docs/19-plano-follow-up-fases.md` — ler antes de continuar qualquer fase. Spec das engines: `docs/05-engines-por-exercicio.xlsx`.
 
 ## Stack
 
