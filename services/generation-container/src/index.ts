@@ -38,6 +38,12 @@ export class GenerationContainer extends Container<Env> {
     // token de API a partir da sessão OAuth do `wrangler login` local, as
     // duas coisas são mecanismos diferentes) e setado com
     // `wrangler secret put CLOUDFLARE_API_TOKEN` neste diretório.
+    // Secret ausente vira "" aqui; write_exercises.py trata "" como "fora do
+    // container" e cai no caminho `npx wrangler`, que nao existe na imagem --
+    // por isso o aviso explicito.
+    if (!env.CLOUDFLARE_API_TOKEN) {
+      console.error("CLOUDFLARE_API_TOKEN ausente -- o batch diario nao consegue gravar no D1");
+    }
     this.envVars = {
       GEMINI_API_KEY: env.GEMINI_API_KEY ?? "",
       hugging_face_api_key: env.HUGGINGFACE_API_KEY ?? "",
@@ -203,7 +209,28 @@ export default {
   // raciocínio de cada fonte). waitUntil segura o Worker vivo além do fim
   // síncrono do evento -- necessário porque o batch inteiro (até 20 chamadas
   // sequenciais, cada uma com I/O de LLM/yt-dlp) passa fácil de 1 minuto.
+  //
+  // O resultado e' logado de proposito: sem isso, erro por item (que
+  // runDailyBatch guarda no array em vez de lancar) e falha ao subir o
+  // container nunca apareciam no log do Worker -- o cron ficou parado desde
+  // 10/10/2026 (conta com pagamento em atraso) sem nenhum sinal.
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runDailyBatch(env));
+    ctx.waitUntil(
+      runDailyBatch(env).then(
+        (result) => {
+          const errors = [...result.video, ...result.reading].filter((r) => r?.error);
+          const summary = {
+            video_ok: result.video.filter((r) => !r?.error && !r?.skipped).length,
+            reading_ok: result.reading.filter((r) => !r?.error && !r?.skipped).length,
+            errors: errors.map((r) => r.error),
+          };
+          if (errors.length) console.error("daily batch com erros", JSON.stringify(summary));
+          else console.log("daily batch ok", JSON.stringify(summary));
+        },
+        (err) => {
+          console.error("daily batch falhou antes do loop", (err as Error).message, (err as Error).stack);
+        }
+      )
+    );
   },
 };
