@@ -51,7 +51,7 @@ docs/           planejamento, decisões, mockups/
 - O app lê exercícios só pela view `servable_exercises`, nunca pela tabela `exercises` direto.
 - Migrations são aplicadas à mão com `wrangler d1 execute`; `0001_init.sql` não é idempotente.
 - Código do pipeline chega aos containers por cópia (`vendor/`) via `prepare-vendor.sh`; arquivo novo no pipeline pode não chegar ao container.
-- Três listas de dependências Python divergentes: `pipeline/pyproject.toml` (incompleta), `requirements.txt` da raiz, e uma por container.
+- Duas fontes de dependências Python, cada uma necessária (não é mais divergência por acidente): `pipeline/pyproject.toml` — fonte única do pipeline, inclui agora os clientes de LLM (`openai`, `anthropic`, `google-genai`, `python-dotenv`) que antes só existiam soltos no `.venv`, fora de qualquer manifesto — e um `requirements.txt` por container (cópia mínima do que o `Dockerfile` precisa, mantida por `prepare-vendor.sh`). O `requirements.txt` da raiz foi removido: nada o lia (nem CI, nem Docker, nem `verify.sh`), só divergia.
 - O token HF tem três nomes conforme o lugar — ver `.env.example`.
 - D1/R2 locais podem divergir entre `wrangler pages dev` e a CLI — ler `docs/local-dev-troubleshooting.md` antes de confiar em query local.
 

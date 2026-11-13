@@ -9,6 +9,10 @@ dependencies = [
     "spacy",
     "language-tool-python",
     "requests",
+    "openai",            # cliente usado por llm_client.chat()/chat_structured() (providers hf:/publicai:)
+    "anthropic",         # cliente usado por llm_client._chat_claude (provider claude:)
+    "google-genai",      # cliente usado por llm_client._chat_gemini/_chat_structured_gemini (gemini*/gemma*)
+    "python-dotenv",     # llm_client._ensure_env_loaded carrega .env da raiz
     "ollama",           # cliente python p/ Ollama local (motor de geracao)
     "gensim",           # carregar vetores fastText de palavra (dedupe na mineracao de video)
     "py-openthesaurus", # sinonimo/registro formal, geracao de distratores

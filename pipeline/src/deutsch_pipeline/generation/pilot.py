@@ -91,6 +91,13 @@ def generate_for_topic(
         model.startswith("azure:")
     )
 
+    # fix(known-issues #1): usa o schema_class recebido do chamador em vez de
+    # assumir sempre FillBlankBatchResponse. generate_batch.py resolve o
+    # schema certo por engine via ENGINE_SCHEMAS e passa aqui; o fallback so'
+    # cobre o uso direto deste modulo (pilot.main, Fase 0 original), que
+    # nunca passa schema_class.
+    effective_schema = schema_class or FillBlankBatchResponse
+
     for attempt in range(1, max_retries + 2):
         try:
             if use_structured:
@@ -99,7 +106,7 @@ def generate_for_topic(
                     model=model,
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
-                    schema_class=FillBlankBatchResponse,
+                    schema_class=effective_schema,
                     temperature=0.4
                 )
                 items = structured_data["exercises"]

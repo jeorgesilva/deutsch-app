@@ -67,7 +67,15 @@ ENGINE_SCHEMAS = {
     "GapFillGovernanceEngine": schemas.FillBlankBatchResponse,
     "FillBlankEngine": schemas.FillBlankBatchResponse,
     "UnscrambleEngine": schemas.UnscrambleBatchResponse,
-    # Adicione os fallbacks ou novos schemas conforme implementar o Grupo A completo
+    # fix(known-issues #1): StructuralTransform/RegisterReformulation/WordBankGuess
+    # ficavam sem entrada aqui -> schema_class chegava None em pilot.py, que
+    # ate' entao tambem ignorava o parametro e usava FillBlankBatchResponse
+    # pra todo mundo. RegisterReformulationEngine reusa o mesmo schema de
+    # StructuralTransformEngine porque reusa o mesmo build_exercise_fields_*
+    # (sentence_a/sentence_b -- ver prompts_registerreformulation.py).
+    "StructuralTransformEngine": schemas.StructuralTransformBatchResponse,
+    "RegisterReformulationEngine": schemas.StructuralTransformBatchResponse,
+    "WordBankGuessEngine": schemas.WordBankGuessBatchResponse,
 }
 
 EXERCISE_FIELD_BUILDERS = {
@@ -126,8 +134,10 @@ def generate_for_topic_chunked(
             template_name=prompts_module.TEMPLATE_NAME,
             user_prompt_builder=prompts_module.build_user_prompt,
             exercise_field_builder=exercise_field_builder,
-            # Se o modelo for hf: ou gemini, o pilot usará esse contrato nativamente!
-            schema_class=schema_class if hasattr(generate_for_topic, "__code__") else None 
+            # Schema real por engine (ENGINE_SCHEMAS); None cai no fallback de
+            # pilot.generate_for_topic (FillBlankBatchResponse) se o engine
+            # ainda nao tiver entrada dedicada.
+            schema_class=schema_class,
         )
         offset = len(exercises)
         for i, ex in enumerate(chunk, start=1):
@@ -191,7 +201,10 @@ def main():
         print(f"[{topic.id}] Gerando {args.n_per_topic} itens para '{topic.topico}' (em blocos de {args.items_per_call})...")
         t0 = time.time()
         exercises = generate_for_topic_chunked(
-            model=args.model,
+            # fix(known-issues #2): usa o modelo resolvido (pode ser o STRONG_MODEL
+            # forcado por model_routing pra padroes fracos), nao args.model cru --
+            # o log acima ja afirmava isso, mas a chamada real ignorava.
+            model=model_for_topic,
             topic=topic,
             n_total=args.n_per_topic,
             items_per_call=args.items_per_call,
@@ -208,6 +221,11 @@ def main():
         ok = sum(1 for e in exercises if e["validation_status"] == "auto_ok")
         print(f"  -> {ok}/{len(exercises)} auto_ok, {inserted} gravados no D1 ({skipped} pulados)")
 
+        # fix(known-issues #3): acumula DENTRO do loop, por topico -- antes so
+        # a ultima iteracao sobrevivia pro checkpoint final (e dava NameError
+        # com zero topicos).
+        all_exercises.extend(exercises)
+
     # docs/14 -- liga cada exercicio novo a lexicon (exercise_lexicon_refs),
     # pro contador de vocabulario do dashboard. Idempotente/incremental por
     # construcao (so pega exercicios sem ref ainda), roda uma vez no fim do
@@ -217,9 +235,10 @@ def main():
     if processed:
         print(f"[lexicon] {processed} exercicios novos lematizados, {with_refs} ganharam pelo menos 1 exercise_lexicon_refs.")
 
-        all_exercises.extend(exercises)
-        lt_path.write_text(json.dumps(all_exercises, ensure_ascii=False, indent=2), encoding="utf-8")  # checkpoint
-
+    # fix(known-issues #3): checkpoint grava sempre (nao so' quando processed
+    # for truthy) -- precisa sobreviver mesmo com zero exercicios novos
+    # lematizados (ex.: tudo pulado, ou --topic-ids ja processado antes).
+    lt_path.write_text(json.dumps(all_exercises, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nCheckpoint final salvo em {lt_path}")
 
     by_reason: dict[str, int] = {}
