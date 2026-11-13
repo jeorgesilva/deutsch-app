@@ -25,7 +25,7 @@ mkdir -p "$DEST/generation" "$DEST/validation" "$DEST/video" "$DEST/ingest"
 
 cp "$SRC/__init__.py" "$DEST/__init__.py"
 
-for f in __init__.py llm_client.py model_routing.py topics.py pilot.py service.py \
+for f in __init__.py llm_client.py model_routing.py topics.py pilot.py schemas.py service.py \
          prompts.py prompts_fillblank.py prompts_unscramble.py \
          prompts_structuraltransform.py prompts_registerreformulation.py \
          prompts_wordbankguess.py \

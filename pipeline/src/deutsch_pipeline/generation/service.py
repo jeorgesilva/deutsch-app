@@ -36,6 +36,7 @@ from . import prompts_registerreformulation
 from . import prompts_structuraltransform
 from . import prompts_unscramble
 from . import prompts_wordbankguess
+from . import schemas
 from .daily_reading_batch import create_next_reading_block
 from .model_routing import resolve_model
 from .pilot import build_exercise_fields_gapfill, generate_for_topic
@@ -61,6 +62,18 @@ EXERCISE_FIELD_BUILDERS = {
     "StructuralTransformEngine": prompts_structuraltransform.build_exercise_fields_structuraltransform,
     "RegisterReformulationEngine": prompts_registerreformulation.build_exercise_fields_structuraltransform,
     "WordBankGuessEngine": prompts_wordbankguess.build_exercise_fields_wordbankguess,
+}
+# Mesmo mapa de generate_batch.py (known-issues #1): sem isso schema_class
+# chegava None em pilot.generate_for_topic e todo provedor com structured
+# output (azure:/hf:/gemini*) pedia o schema de FillBlank. Duplicado em vez
+# de importado porque generate_batch.py nao entra no vendor (puxa lexicon/).
+ENGINE_SCHEMAS = {
+    "GapFillGovernanceEngine": schemas.FillBlankBatchResponse,
+    "FillBlankEngine": schemas.FillBlankBatchResponse,
+    "UnscrambleEngine": schemas.UnscrambleBatchResponse,
+    "StructuralTransformEngine": schemas.StructuralTransformBatchResponse,
+    "RegisterReformulationEngine": schemas.StructuralTransformBatchResponse,
+    "WordBankGuessEngine": schemas.WordBankGuessBatchResponse,
 }
 
 
@@ -97,6 +110,7 @@ def generate_topic_endpoint():
     model_used = resolve_model(topic, model)
     prompts_module = ENGINE_PROMPTS[engine]
     exercise_field_builder = EXERCISE_FIELD_BUILDERS.get(engine, build_exercise_fields_gapfill)
+    schema_class = ENGINE_SCHEMAS.get(engine)
 
     try:
         exercises = []
@@ -109,6 +123,7 @@ def generate_topic_endpoint():
                 template_name=prompts_module.TEMPLATE_NAME,
                 user_prompt_builder=prompts_module.build_user_prompt,
                 exercise_field_builder=exercise_field_builder,
+                schema_class=schema_class,
             )
             offset = len(exercises)
             for i, ex in enumerate(chunk, start=1):
