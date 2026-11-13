@@ -7,6 +7,7 @@ import pipeline.src.deutsch_pipeline.phonetics.service as phon_service
 import pipeline.src.deutsch_pipeline.generation.prompts_reading_block as prompts_rb
 import pipeline.src.deutsch_pipeline.validation.export_review_queue as review_q
 import pipeline.src.deutsch_pipeline.generation.schemas as pipeline_schemas
+import pipeline.tests.conftest as test_conftest
 
 
 # 1. Microservice API Endpoints (Invoked dynamically over HTTP via Edge Workers)
@@ -33,4 +34,4 @@ pipeline_schemas.FillBlankBatchResponse
 pipeline_schemas.UnscrambleItem.sentence_ordered
 pipeline_schemas.UnscrambleItem.words_scrambled
 pipeline_schemas.UnscrambleItem.clue_translation
-
+test_conftest.isolamento
