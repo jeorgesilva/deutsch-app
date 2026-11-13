@@ -26,13 +26,13 @@ class BlockedInTests(RuntimeError):
 
 
 def _blocked(what):
-    def _raise(*args, **kwargs):
+    def _raise(*_args, **_kwargs):
         raise BlockedInTests(f"{what} bloqueado em teste")
     return _raise
 
 
 @pytest.fixture(autouse=True)
-def _isolamento(monkeypatch):
+def isolamento(monkeypatch):
     for name in SECRET_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 
