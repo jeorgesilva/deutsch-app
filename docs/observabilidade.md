@@ -18,11 +18,11 @@ O deploy do app (Pages) não passa pelo Actions: o projeto `deutsch-app` não te
 
 ## O que depende de você num painel
 
-- [ ] Criar conta healthchecks.io, criar 1 check, colar a URL como
+- [x] Criar conta healthchecks.io, criar 1 check, colar a URL como
       secret HEALTHCHECKS_PING_URL no container de geração
 - [ ] Settings → Environments → production → Required reviewers
       (me adicionar) nos 2-3 repos/workflows de deploy
-- [ ] Criar Incoming Webhook no Slack, colar como secret
+- [x] Criar Incoming Webhook no Slack, colar como secret
       SLACK_WEBHOOK_URL no repo
 - [ ] Cloudflare Dashboard → Workers & Pages → [worker] →
       Integrations → Sentry → conectar (precisa de conta Sentry free)
@@ -35,7 +35,17 @@ O deploy do app (Pages) não passa pelo Actions: o projeto `deutsch-app` não te
 - **Healthchecks:** o secret vai no **Worker `deutsch-generation-service`**, não no container — quem pinga é o `scheduled()` do Worker TS. Comando, em `services/generation-container/`: `npx wrangler secret put HEALTHCHECKS_PING_URL`. Como só o Worker lê o secret, não precisa de redeploy da imagem.
 - **Período do check:** o cron roda em `0 4 * * *` UTC (`services/generation-container/wrangler.toml`). Configurar o check como cron `0 4 * * *` em UTC (ou período de 1 dia) com tolerância de algumas horas — o batch faz até 20 chamadas sequenciais de LLM/yt-dlp e pode demorar.
 - **Environments:** os workflows de deploy são 2, no mesmo repo (`deploy-generation-service.yml` e `deploy-phonetic-service.yml`). O environment `production` só aparece em Settings depois do primeiro run que o referencia.
-- **Slack:** o secret `SLACK_WEBHOOK_URL` já existe no repo (gravado em 14/11/2026 00:42 UTC); o formato do valor não foi conferido. O primeiro deploy depois do merge da 6.3 é o teste: se a mensagem não chegar, o log do step `Notify Slack` mostra o erro do `curl`.
+- **Slack:** o secret `SLACK_WEBHOOK_URL` já existe no repo (gravado em 14/11/2026 00:42 UTC); o usuário conferiu o formato em 14/11. Ainda falta um teste real: o primeiro deploy de container depois do merge da 6.3. Se a mensagem não chegar, o log do step `Notify Slack` mostra o erro do `curl`.
+
+### Estado em 14/11/2026
+
+- **Healthchecks:** feito. O secret foi gravado no Worker `deutsch-generation-service` às ~02:00 UTC. O primeiro ping de verdade será o cron das 04:00 UTC de 14/11.
+- **Environment:** o revisor foi adicionado ao environment **`copilot`**, que é o do agente do GitHub Copilot, não o dos deploys. Os workflows usam `environment: production`, que ainda não tem revisor. Falta criar `production` (Settings → Environments → New environment) e se adicionar como revisor. Avaliar também tirar o revisor do `copilot`, que pode passar a travar o Copilot.
+- **Sentry: o caminho do checklist não existe mais.** A aba *Integrations* dos Workers foi removida do painel da Cloudflare em 09/06/2025 (changelog "Workers native integrations were removed"). Hoje há dois caminhos, e os dois exigem mudança no repo, ou seja, redeploy do Worker:
+  - exportar por OpenTelemetry: painel → **Observability → Destinations**, com o endpoint OTLP do Sentry, e depois ligar o export no `wrangler.toml` do Worker;
+  - o SDK `@sentry/cloudflare` no código do Worker.
+
+  Fica como opcional. O heartbeat mais o log do `scheduled()` já cobrem o incidente que motivou a Fase 6.
 
 ## Identidade por papel no Slack (6.6)
 

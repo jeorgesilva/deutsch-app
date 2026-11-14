@@ -25,10 +25,13 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 
 ## Estado do repo (14/11/2026)
 
-- `origin/main` em `aece0c8` (merge do PR #6).
+- `origin/main` em `01b1dc6` (merge do PR #15, 14/11/2026 ~02:10 UTC).
 - PR #5 (`424b12f`): fix do `schema_class` no container, `schemas.py` no vendor, `vendor-files.txt` + `pipeline/tests/test_vendor_manifest.py`.
 - PR #6 (`554601b`): `scheduled()` passa a logar o resumo do batch diário e as falhas; aviso quando `CLOUDFLARE_API_TOKEN` está ausente. Feito em outra sessão.
-- Branch de trabalho deste documento: `chore/plano-fases`.
+- PR #7: este plano.
+- PRs #8–#15 (14/11), uma branch por fatia: Fase 3, 6.1, 6.2, 6.3, 6.4, 6.5+6.6, 4a e 4b.
+- **Deploys de 14/11:** fonética passou às 01:48 UTC (disparo manual; a imagem anterior era de 09/08); geração passou com o merge do #9 (heartbeat). O Pages **não** foi publicado: o watchdog da 4a está em `main`, mas ainda não está no ar.
+- Merge de PR empilhado: fazer o merge, mudar a base do PR seguinte para `main` e **só depois** apagar a branch. Apagar antes faz o GitHub fechar o PR seguinte. Depois de mudar a base, fechar e reabrir o PR, porque o `verify.yml` não dispara com a troca de base.
 - Ferramentas disponíveis na máquina: `gh` autenticado (`jeorgesilva`); `wrangler` autenticado; MCP do Cloudflare configurado (só carrega numa sessão nova).
 
 ## Fatos já confirmados (não re-derivar)
@@ -42,6 +45,17 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 - O cron de 04:00 UTC roda no `scheduled()` do **Worker TS** ([services/generation-container/src/index.ts](../services/generation-container/src/index.ts)), que chama o container item por item (`/generate-video-item`, `/generate-reading-item`). Não há loop de cron em Python.
 - `video_clips` não tem `created_at`. Para datar o conteúdo diário, usar `exercises.created_at` (com `video_clip_id`) e `reading_blocks.created_at`.
 - O `/health` do Worker responde `ok` sem tocar no container; ele não prova que o container sobe.
+- **O cron diário roda de novo desde 14/11** (5 `reading_blocks` e 179 `exercises` entre 04:02 e 04:15 UTC). Mas ele **é cortado aos 15 min todo dia**: o limite de duração de um Cron Trigger é 15 min (docs da Cloudflare, Workers → Limits). O último registro sai sempre entre 04:13 e 04:17, hoje e de 05/10 a 09/10. Cada bloco de leitura leva ~2,5 min, então entram 4–6 por dia, nunca os 10 que o código pretende. Como a execução morre no meio, o `.then(...)` do `scheduled()` não roda: **não sai o log do resumo nem o ping do healthchecks** (o check fica "atrasado" todo dia). Isso é estrutural e existe desde o início do cron; não é regressão.
+  - Confirmado nos Workers Logs de 14/11: a invocação `scheduled` terminou com `outcome = canceled` e `wallTime = 899.323 ms`, que dá 14 min 59 s. Houve 6 chamadas a `/generate-reading-item`: 5 ok (até 168 s cada) e 1 `canceled`. Nenhuma mensagem `daily batch …`.
+- **Vídeo em 14/11: 0 itens, 10 de 10 erros.** As 10 chamadas a `/generate-video-item` voltaram com erro em ≤ 8,4 s cada (Workers Logs, `level = error`). O service responde `502 "falha ingerindo vídeo: <exceção>"` para qualquer exceção, mas o texto **não ficou em log**: `runDailyBatch` guarda o erro no array e só o logaria no resumo, que o corte impediu, e o stdout do Python não aparece nos Workers Logs. Em 09/10 ainda entravam ~56 exercícios de vídeo por dia.
+  - **Erro real (chamada manual, 14/11 ~12:00 UTC):** `falha ingerindo vídeo: ERROR: Unable to download video subtitles for 'de': HTTP Error 429: Too Many Requests`. A listagem da playlist funciona; o YouTube devolve 429 no download da legenda para o IP do container (IP de datacenter; em 09/10, com a imagem antiga, ainda funcionava). O download da legenda acontece antes de qualquer escrita no D1 (`daily_batch.py`), então a falha não deixa nada parcial. A YouTube Data API está fora pelo `CLAUDE.md` (legenda de terceiros só via `yt-dlp`).
+  - **Causa raiz:** o YouTube devolve 429 especificamente no download da legenda (endpoint `timedtext`), não na listagem da playlist, que continua funcionando. O motivo é a reputação do IP de datacenter do container.
+  - **Fonte da causa: relatos de terceiros online (2026), não teste nosso.** Esses relatos descrevem o mesmo sintoma (a legenda falha, o resto funciona). Neles, espera entre tentativas, backoff exponencial, cookies e a versão de pré-lançamento do `yt-dlp` não resolveram, porque o problema é o IP e não o timing ou o token. Também não testamos proxy residencial nem PO token: a decisão foi não depender de contornos de reputação. A YouTube Data API está fora por dois motivos: o `CLAUDE.md` proíbe usá-la para legenda de terceiros, e, segundo os mesmos relatos, ela só libera legenda do canal do próprio usuário autenticado.
+- **Decisões do usuário (14/11/2026), não reabrir sem achado novo:**
+  1. **O batch diário sai do limite de 15 min do cron** (opção "c"). Fatia 1: `DailyBatchWorkflow` (Cloudflare Workflows com `schedules`), um step por item, erro logado na hora, heartbeat no último step. Mesma decisão de arquitetura da 4c.
+  2. **O vídeo sai do batch automático na nuvem.** É remoção, não feature flag: não existe cenário em que o vídeo automático funcione do IP do container hoje. A leitura continua 100% automática.
+  3. **A ingestão de vídeo vira um script local**, rodado à mão pelo usuário do IP residencial, em lote (vários candidatos por execução; semanal basta, já que existem ~1.000 clipes). O script reaproveita o pipeline existente sem duplicar lógica e grava no D1 de produção pelo `wrangler --remote`, com a sessão OAuth local, sem `D1_HTTP_API_TOKEN`.
+  - O environment `production` foi criado com o usuário como revisor (14/11).
 
 ## Tabela de estado
 
@@ -51,12 +65,12 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 2 | `ENGINE_SCHEMAS` + `schema_class` no `generation/service.py`; `schemas.py` no vendor | ✅ código em `main` · ⏳ deploy depende de Containers voltar |
 | 2+ | Prevenção camada 1: manifesto de vendor + teste | ✅ PR #5 |
 | 2+ | Cron falhando em silêncio: logs no `scheduled()` | ✅ PR #6 |
-| 0 | **Bloqueador:** acesso a Cloudflare Containers voltar e um deploy de container passar | 🟡 acesso ok + deploy de geração ok (13/11 23:42 UTC) · ⏳ deploy de fonética · ⏳ cron de 14/11 gravar |
+| 0 | **Bloqueador:** acesso a Cloudflare Containers voltar e um deploy de container passar | 🟡 acesso ok · deploys de geração e fonética ok (14/11) · ⏳ cron de 14/11 04:00 UTC gravar no D1 |
 | 3 | Lacunas de documentação | ✅ branch `docs/fase-3-lacunas` (aguarda aprovação) |
 | 4a | Watchdog de jobs presos em `running` | ✅ branch `feat/watchdog-jobs` (aguarda aprovação) · timeout 90 s **depende da arquitetura**: revisar na 4c |
 | 4b | Filtro editorial mínimo no RSS de notícias | ✅ decidido **sem filtro** (usuário, 14/11): todos os temas ficam; ver `docs/18` |
 | 4c | Geração sob demanda ponta a ponta | ⬜ (depende do bloqueador) |
-| 4d | Templates que nunca escalaram além do piloto | ⬜ |
+| 4d | Templates que nunca escalaram além do piloto | 🟡 levantamento feito (branch `docs/fase-4d-templates`) · ⏳ decisão do usuário por grupo |
 | 5a | Métricas no model card do corretor | ⬜ (só depois de 1–4) |
 | 5b | Demo sem fricção do corretor | ⬜ |
 | 5c | Corretor como feature do deutsch-app | ⬜ |
@@ -113,6 +127,12 @@ Feito em 14/11/2026: as quatro notas foram corrigidas (`npm test` sai com 0; vul
 - **4c. Geração sob demanda ponta a ponta.** Nunca rodou em produção (`docs/17-auditoria-projeto.md`). Depende da Fase 0. Documentar o resultado real, inclusive se falhar.
   - Esperado pelo levantamento da 4a: na arquitetura atual (`waitUntil`) o job morre ~30 s depois da resposta e o watchdog o marca `failed` em 90 s. Escolher com o usuário para onde o job vai (Queues, Workflows ou o próprio container gravando no D1) e, **na mesma mudança**, subir `JOB_TIMEOUT_SECONDS` (`topicRegeneration.ts`) e `REGEN_POLL_MAX_MS` (`app.js`) para a duração real de um lote (ordem de 15 min).
 - **4d. Templates/engines que nunca escalaram além do piloto.** Levantar e **propor** se escalam ou são descontinuados, sem decidir sozinho.
+  - **Levantamento (14/11/2026, D1 remoto):** a foto da auditoria de 10/08 (`docs/17`, seção 4) mudou. O cron diário fez **escalar** tudo o que deriva de leitura e vídeo: `ParagraphOrderEngine` tem 273 itens servíveis, `PunctuationCapsEngine` 247, e `PredictThenVerify`, `VowelInsert`, `LetterAnagram`, `BinaryChoice`, `TrueFalse`, `ComprehensionQA`, `CompoundSegmentation` e `VideoTask` estão entre 790 e 1.636 cada.
+    - **(a) Piloto que nunca escalou:** `ReadAloudEngine` e `SpokenGapFillEngine`, com 1 item cada, a mesma frase de teste ("Der Staat hat die Stadt finanziell unterstützt."). Já há matéria-prima e gerador: 26 `phonetic_points` e os scripts `phonetics/create_readaloud_exercise.py` e `create_spokengapfill_exercise.py`. Uso: 6 e 4 tentativas.
+    - **(b) Grupo A por tópico parado no lote de 05/08:** FillBlank (277), WordBankGuess (123), Unscramble (105), StructuralTransform (101), GapFillGovernance (82), RegisterReformulation (10), Reaction e Transition (18 cada). Nenhum item novo desde 05/08, porque a geração sob demanda (4c) nunca rodou. O `RegisterReformulationEngine` teve **17 de 28 rejeitados na revisão humana** (61%; todos tinham passado no gate automático): problema de qualidade antes de volume.
+    - **(c) Na spec (`docs/05`, Grupo B, "em escopo v1 = Sim") e nunca construídos, sem código e sem decisão registrada:** `GuidedImitationEngine` ("Make a similar"), `OpenPromptEngine` (4 exercícios: Completing, 5 opiniões, Consequências em cadeia…) e `PersonalReferenceEngine` (Notebook, How do you say it?, List). `TutorSessionEngine` ficou sem engine de propósito (correção humana, `types.ts`); `SpacedReviewEngine` é a própria sessão FSRS; `VideoStimulusEngine` é o estímulo, não uma tarefa.
+    - **(d) Não é problema:** os 5 `exercises` em `pending` que a auditoria apontou são os de `OpinionEssay` (2), `QuickOpinionSpeech` (2) e `RecordedOpinion` (1). Essas linhas são criadas por plano do usuário e não passam por `servable_exercises` por design (`opinionEssay.ts`).
+    - **Uso real:** ~100 tentativas no total, no máximo 20 por template; **última tentativa em 04/09/2026**. São ~14 mil itens servíveis para ~100 tentativas.
 - **Prevenção camadas 2 e 3** (do incidente de 13/11):
   - Camada 2, checagem do `/health` depois do deploy: o `/health` atual não toca no container, então primeiro criar uma rota que exija o container de pé (por exemplo `/health/container`) e só então checá-la no workflow. Pode se juntar à 6.3.
   - Camada 3, aviso de conteúdo velho: **a 6.1 (healthchecks.io) cobre isso por fora**. Um indicador na home ("último item diário em DD/MM", em âmbar) fica opcional.

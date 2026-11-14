@@ -3,7 +3,7 @@
 Dois projetos independentes, cada um com Worker TS (`src/index.ts`, Durable Object que controla o container), `Dockerfile`, `run.py` (waitress na 8080) e `requirements.txt` próprio. A lógica Python vem do pipeline; não há rota duplicada aqui.
 
 - `phonetic-container/`: serve `deutsch_pipeline.phonetics.service` (correção fonética, STT, TTS). `enableInternet = false`, modelos wav2vec2/faster-whisper embutidos na imagem.
-- `generation-container/`: serve `deutsch_pipeline.generation.service` (geração sob demanda por tópico, item diário de vídeo/leitura). Cron diário dispara `/run-daily-batch` via `scheduled()`. `enableInternet = true`.
+- `generation-container/`: serve `deutsch_pipeline.generation.service` (geração sob demanda por tópico, item diário de vídeo/leitura). O batch diário é o `DailyBatchWorkflow` (Cloudflare Workflows, `schedules = ["0 4 * * *"]` no `wrangler.toml`): **só leitura**, um step por bloco, com o heartbeat no último step. Não é Cron Trigger + `scheduled()`, que era cortado aos 15 min. `/run-daily-batch` cria uma instância manual. **Vídeo não roda na nuvem:** o YouTube devolve 429 no download de legenda para o IP do container, e a ingestão de vídeo é local (ver `CLAUDE.md` raiz). `/generate-video-item` continua existindo no container, mas nada o chama. `enableInternet = true`.
 
 ## vendor/ e prepare-vendor.sh
 
