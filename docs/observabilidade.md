@@ -10,6 +10,7 @@ Motivo: o cron diário ficou parado de 10/10 a 14/11/2026 sem nenhum sinal (ver 
 | Log do batch diário (PR #6) | mesmo `scheduled()` | `daily batch ok` / `daily batch com erros` / `daily batch sem item novo` / `daily batch falhou antes do loop`, com o resumo em JSON. Ver com `npx wrangler tail` em `services/generation-container/` ou no painel de Workers Logs. | Sempre ativo |
 | Gate de aprovação (6.2) | `environment: production` no job `deploy` dos dois workflows de container | Deploy espera aprovação manual | Não bloqueia nada até haver reviewer |
 | Aviso de deploy (6.3) | step `Notify Slack` dos dois workflows de container | Mensagem com workflow, branch, status e link do run, em sucesso **e** em falha | Step pulado (`continue-on-error`) |
+| Revisão semanal por agente (6.7) | `.github/workflows/revisao-semanal.yml` | Hoje só `workflow_dispatch`; depois, segunda 07:00 UTC. Relatório do agente (só leitura) no Slack, com aviso também em falha e em semana sem commit | Sem `CLAUDE_CODE_OAUTH_TOKEN` o step do Claude falha e o Slack avisa a falha |
 
 O `/run-daily-batch` manual não pinga o healthchecks: só o cron, para o período do check refletir o agendamento. O `/health` do Worker continua respondendo `ok` sem tocar no container — não serve como prova de que o container sobe (camada 2 da prevenção, ainda pendente no plano).
 
@@ -25,6 +26,9 @@ O deploy do app (Pages) não passa pelo Actions: o projeto `deutsch-app` não te
       SLACK_WEBHOOK_URL no repo
 - [ ] Cloudflare Dashboard → Workers & Pages → [worker] →
       Integrations → Sentry → conectar (precisa de conta Sentry free)
+- [ ] (6.7) `claude setup-token` no terminal local, colar o token como
+      secret CLAUDE_CODE_OAUTH_TOKEN no repo, rodar "Revisao semanal
+      (agente)" à mão em Actions e só então descomentar o `schedule`
 
 ### Correções à lista acima
 

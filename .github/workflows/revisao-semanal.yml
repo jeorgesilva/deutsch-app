@@ -1,0 +1,101 @@
+# Fase 6.7 v1 -- revisao semanal dos commits do main por um agente, com o
+# resumo no Slack. Prompt generico, sem referenciar .claude/agents/*.md (isso
+# e' a v1.1). Autentica pela assinatura (CLAUDE_CODE_OAUTH_TOKEN, gerado com
+# `claude setup-token`), nao por ANTHROPIC_API_KEY.
+#
+# Regra fixa para qualquer job periodico de agente: so' leitura. O token do
+# GitHub tem contents: read e o Claude nao tem Edit/Write nem abre PR -- o
+# guardrail de data/raw/ e dos prompts few-shot vale pela permissao, nao pela
+# instrucao do prompt.
+name: Revisao semanal (agente)
+
+on:
+  # Primeiro testar so' com disparo manual (token + Slack + permissao). Depois
+  # de um run manual ok, descomentar o schedule: segunda 07:00 UTC.
+  # schedule:
+  #   - cron: "0 7 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: revisao-semanal
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Sempre o main, mesmo num workflow_dispatch disparado de outro branch.
+          ref: main
+          fetch-depth: 0
+
+      # Semana sem commit nao gasta credito: pula o Claude e so' avisa.
+      - name: Contar commits da semana
+        id: commits
+        run: echo "count=$(git log --since='7 days ago' --oneline | wc -l | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: Revisao
+        id: claude
+        if: steps.commits.outputs.count != '0'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Token padrao (contents: read) em vez do GitHub App do Claude.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Repo publico: o relatorio vai para o Slack, nao para o Step Summary.
+          display_report: "false"
+          claude_args: >-
+            --model sonnet
+            --max-turns 30
+            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git diff:*)"
+            --disallowedTools "Edit,Write,NotebookEdit,WebFetch,WebSearch"
+          prompt: |
+            Revise os commits dos últimos 7 dias no branch main deste repositório
+            (comece por `git log --since="7 days ago" --stat`, depois `git show` nos
+            que valerem a pena). Aponte problemas de qualidade e de padrão: bugs
+            prováveis, divergência das convenções do CLAUDE.md, teste faltando onde
+            o risco é real, código morto. Não comente gramática alemã, regência nem
+            conteúdo curado: isso é revisão humana.
+
+            Você não pode alterar nada. Responda só com o relatório, em português,
+            no formato mrkdwn do Slack (*negrito*, listas com •), com no máximo 15
+            itens, do mais grave para o menos grave. Cada item: commit curto,
+            arquivo e uma frase. Se não houver nada relevante, diga isso em uma linha.
+
+      - name: Notify Slack
+        if: always()
+        continue-on-error: true
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_USERNAME: "🔍 Revisão semanal"
+          SLACK_ICON_EMOJI: ":mag:"
+          JOB_STATUS: ${{ job.status }}
+          COMMIT_COUNT: ${{ steps.commits.outputs.count }}
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL ausente -- aviso no Slack pulado."
+            exit 0
+          fi
+          if [ "$COMMIT_COUNT" = "0" ]; then
+            body="Sem commits no main nos últimos 7 dias."
+          elif [ "$JOB_STATUS" != "success" ]; then
+            body="❌ revisão falhou ($JOB_STATUS) -- ver o log do run."
+          else
+            # Ultima mensagem "result" do execution_file; corta em 3500
+            # caracteres para caber folgado numa mensagem do Slack.
+            body=$(jq -r '[.[] | select(.type == "result")] | last | .result // empty' "$EXECUTION_FILE" | head -c 3500)
+            [ -n "$body" ] || body="⚠️ revisão terminou sem relatório."
+          fi
+          jq -n \
+            --arg text "*Revisão semanal do main* ($COMMIT_COUNT commits) · <$RUN_URL|ver run>"$'\n\n'"$body" \
+            --arg username "$SLACK_USERNAME" \
+            --arg icon_emoji "$SLACK_ICON_EMOJI" \
+            '{text: $text, username: $username, icon_emoji: $icon_emoji}' \
+          | curl -fsS -X POST -H "Content-Type: application/json" --data @- "$SLACK_WEBHOOK_URL"
