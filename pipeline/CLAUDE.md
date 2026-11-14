@@ -3,7 +3,8 @@
 ## Rodar
 
 - Não está instalado como pacote: `PYTHONPATH=pipeline/src .venv/bin/python -m deutsch_pipeline.<pkg>.<mod>` a partir da raiz do repo.
-- `pyproject.toml` não declara várias dependências usadas (pydantic, google-genai, openai, anthropic, python-dotenv, piper, soundfile e outras). Não há testes.
+- `pyproject.toml` ainda não declara `pydantic` (chega transitivo via `openai`/`anthropic`), `piper` nem `soundfile`.
+- Testes em `pipeline/tests/` (`.venv/bin/python -m pytest pipeline -q`); `conftest.py` bloqueia rede, subprocess e variáveis de API/D1 — teste novo mocka a função de alto nível, nunca afrouxa a guarda.
 - Saídas locais em `pipeline/output/` (gitignored); modelo de voz Piper em `pipeline/models/tts/` (gitignored).
 
 ## llm_client
