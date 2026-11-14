@@ -65,7 +65,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 6.3 | Notificação de deploy no Slack | ✅ branch `ci/slack-deploy` (aguarda aprovação) · ⏳ usuário criar o webhook e o secret |
 | 6.4 | `docs/observabilidade.md` | ✅ branch `docs/observabilidade` (aguarda aprovação) |
 | 6.5 | Subagentes no nível de projeto | 🟡 16 agentes + skill `sast-configuration` em `.claude/` (branch `chore/subagentes-projeto`, aguarda aprovação) · ⏳ commands/skills dos plugins não lidos · ⏳ decisão sobre Cloudflare no escopo de projeto |
-| 6.6 | Identidade por papel nas mensagens do Slack | ⬜ (provavelmente só documentar) |
+| 6.6 | Identidade por papel nas mensagens do Slack | ✅ só documentado em `docs/observabilidade.md` (sem caso concreto; ressalva: webhook de app pode ignorar `username`/`icon_emoji`) |
 
 Ordem sugerida: o bloqueador corre em paralelo (é do usuário). Depois vêm a Fase 3, a 6.1–6.4 (fecham a observabilidade que faltou neste incidente), a Fase 4, a 6.5–6.6 e por último a Fase 5. O usuário pode reordenar; a Fase 5 continua presa ao fechamento das Fases 1–4.
 
