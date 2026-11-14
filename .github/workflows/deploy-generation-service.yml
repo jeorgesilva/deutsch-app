@@ -78,3 +78,32 @@ jobs:
 
           echo "Deploy failed with both configured Cloudflare tokens."
           exit 1
+
+      # Fase 6.3 -- aviso no Slack (incoming webhook), sucesso ou falha.
+      # continue-on-error: nunca muda o resultado do deploy, nem enquanto o
+      # secret nao existir. Tudo entra por env (nunca ${{ }} dentro do
+      # script) e o JSON sai do jq, entao aspas no nome da branch nao quebram
+      # o payload. SLACK_USERNAME/SLACK_ICON_EMOJI sao reusados pela 6.6.
+      - name: Notify Slack
+        if: always()
+        continue-on-error: true
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_USERNAME: "🚀 Deploy Bot"
+          SLACK_ICON_EMOJI: ":rocket:"
+          JOB_STATUS: ${{ job.status }}
+          WORKFLOW: ${{ github.workflow }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL ausente -- aviso no Slack pulado."
+            exit 0
+          fi
+          if [ "$JOB_STATUS" = "success" ]; then status="✅ sucesso"; else status="❌ falha ($JOB_STATUS)"; fi
+          jq -n \
+            --arg text "$WORKFLOW · $BRANCH · $status · <$RUN_URL|ver run>" \
+            --arg username "$SLACK_USERNAME" \
+            --arg icon_emoji "$SLACK_ICON_EMOJI" \
+            '{text: $text, username: $username, icon_emoji: $icon_emoji}' \
+          | curl -fsS -X POST -H "Content-Type: application/json" --data @- "$SLACK_WEBHOOK_URL"
