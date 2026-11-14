@@ -60,7 +60,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 5a | Métricas no model card do corretor | ⬜ (só depois de 1–4) |
 | 5b | Demo sem fricção do corretor | ⬜ |
 | 5c | Corretor como feature do deutsch-app | ⬜ |
-| 6.1 | Dead man's switch no cron | ⬜ |
+| 6.1 | Dead man's switch no cron | ✅ branch `docs/fase-3-lacunas` (aguarda aprovação) · ⏳ usuário criar o check e o secret |
 | 6.2 | `environment: production` nos deploys | ⬜ |
 | 6.3 | Notificação de deploy no Slack | ⬜ |
 | 6.4 | `docs/observabilidade.md` | ⬜ |
@@ -123,7 +123,8 @@ Definida numa sessão de planejamento externa. Implementar direto, em fatias. **
 - **Ajuste já verificado:** o ponto de entrada é o `scheduled()` do Worker TS ([index.ts](../services/generation-container/src/index.ts)), não Python. O equivalente do `except/finally` são os dois ramos do `.then(...)` que o PR #6 criou. Consequências:
   - o secret vai **no Worker** (`wrangler secret put HEALTHCHECKS_PING_URL`, mais o campo no `Env`), não no container. O texto do known-issues deve dizer "secret no Worker `deutsch-generation-service`";
   - como só muda o Worker, isso chega a produção mesmo com o deploy da imagem falhando (ver "Fatos confirmados").
-- **Decisão a confirmar com o usuário:** o que conta como falha. Proposta: `/fail` se o batch rejeitar **ou** se houver algum erro por item **ou** se nada novo entrar (`video_ok + reading_ok == 0` sem `skipped`). Um sucesso parcial com erros manda `/fail`, para não esconder a degradação.
+- **Decidido pelo usuário (14/11/2026):** `/fail` se o batch rejeitar **ou** se houver algum erro por item **ou** se nada novo entrar (`video_ok + reading_ok == 0`, mesmo quando as duas fontes só devolvem `skipped`). Um sucesso parcial com erros manda `/fail`, para não esconder a degradação.
+- O `/run-daily-batch` manual **não** pinga: só o cron, para o período do check refletir o agendamento.
 - Usar `ctx.waitUntil` no ping, para o Worker não terminar antes da chamada sair.
 
 ### 6.2 — Gate de aprovação antes de produção

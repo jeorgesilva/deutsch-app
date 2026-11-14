@@ -58,6 +58,7 @@ interface Env {
   GEMINI_API_KEY?: string;
   HUGGINGFACE_API_KEY?: string;
   CLOUDFLARE_API_TOKEN?: string;
+  HEALTHCHECKS_PING_URL?: string;
 }
 
 // ACHADO REAL (nao flakiness de plataforma beta -- confirmado lendo
@@ -162,6 +163,22 @@ async function runDailyBatch(env: Env): Promise<{ video: any[]; reading: any[] }
   return { video, reading };
 }
 
+// Fase 6.1 -- dead man's switch (healthchecks.io). O check alerta tanto no
+// /fail quanto na AUSENCIA de ping no periodo, entao cobre tambem o caso do
+// cron nem disparar. Falha do proprio ping so' loga: nunca derruba o job.
+async function pingHealthcheck(env: Env, ok: boolean) {
+  const base = env.HEALTHCHECKS_PING_URL?.replace(/\/+$/, "");
+  if (!base) {
+    console.warn("HEALTHCHECKS_PING_URL ausente -- heartbeat do batch diario nao enviado");
+    return;
+  }
+  try {
+    await fetch(ok ? base : `${base}/fail`, { signal: AbortSignal.timeout(10_000) });
+  } catch (err) {
+    console.error("ping do healthchecks falhou", (err as Error).message);
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -214,10 +231,15 @@ export default {
   // runDailyBatch guarda no array em vez de lancar) e falha ao subir o
   // container nunca apareciam no log do Worker -- o cron ficou parado desde
   // 10/10/2026 (conta com pagamento em atraso) sem nenhum sinal.
+  //
+  // Conta como falha pro healthchecks (decisao do usuario, 14/11/2026): o
+  // batch rejeitar, QUALQUER erro por item, ou nada novo entrar (inclusive
+  // quando as duas fontes so' devolvem skipped). Sucesso parcial com erro
+  // manda /fail de proposito -- degradacao nao fica escondida.
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       runDailyBatch(env).then(
-        (result) => {
+        async (result) => {
           const errors = [...result.video, ...result.reading].filter((r) => r?.error);
           const summary = {
             video_ok: result.video.filter((r) => !r?.error && !r?.skipped).length,
@@ -225,10 +247,13 @@ export default {
             errors: errors.map((r) => r.error),
           };
           if (errors.length) console.error("daily batch com erros", JSON.stringify(summary));
+          else if (summary.video_ok + summary.reading_ok === 0) console.error("daily batch sem item novo", JSON.stringify(summary));
           else console.log("daily batch ok", JSON.stringify(summary));
+          await pingHealthcheck(env, errors.length === 0 && summary.video_ok + summary.reading_ok > 0);
         },
-        (err) => {
+        async (err) => {
           console.error("daily batch falhou antes do loop", (err as Error).message, (err as Error).stack);
+          await pingHealthcheck(env, false);
         }
       )
     );
