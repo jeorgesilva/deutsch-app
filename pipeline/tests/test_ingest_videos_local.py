@@ -80,10 +80,19 @@ def test_recusa_com_token_do_container(script, monkeypatch):
     assert os.environ["D1_REMOTE"] == ""
 
 
+def test_recusa_sem_chave_do_llm(script, monkeypatch):
+    # conftest apaga hugging_face_api_key e marca o .env como já carregado.
+    monkeypatch.setenv("D1_REMOTE", "")
+    assert script.main(["--remote", "--model", "hf:x"]) == 2
+    assert os.environ["D1_REMOTE"] == ""
+
+
 def test_remote_liga_d1_remote_e_usa_o_pipeline(script, monkeypatch):
     # daily_batch real não importa sob a guarda do conftest (yt_dlp herda de
     # subprocess.Popen no import) -- entra um módulo falso no lugar.
     monkeypatch.setenv("D1_REMOTE", "")  # monkeypatch restaura depois; main() grava "1"
+    monkeypatch.setenv("PATH", os.environ.get("PATH", ""))  # idem para o PATH
+    monkeypatch.setenv("hugging_face_api_key", "x")
     ingest, calls = fake_ingest([ok(1), {"skipped": True, "reason": "fim"}])
     fake = types.ModuleType("deutsch_pipeline.video.daily_batch")
     fake.ingest_next_new_video = ingest
@@ -91,4 +100,5 @@ def test_remote_liga_d1_remote_e_usa_o_pipeline(script, monkeypatch):
 
     assert script.main(["--remote", "--count", "5", "--model", "hf:x"]) == 0
     assert os.environ["D1_REMOTE"] == "1"
+    assert os.environ["PATH"].split(os.pathsep)[0] == os.path.dirname(sys.executable)
     assert calls == ["hf:x", "hf:x"]

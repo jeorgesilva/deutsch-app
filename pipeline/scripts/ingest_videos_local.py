@@ -82,7 +82,22 @@ def main(argv=None) -> int:
         print("recusado: D1_HTTP_API_TOKEN está definido -- esse é o caminho do container; "
               "aqui a gravação é pelo wrangler --remote.", file=sys.stderr)
         return 2
+    # O pipeline grava clipe, segmentos e os exercícios sem LLM ANTES de chamar
+    # o LLM: sem a chave, a 1ª rodada real (14/11/2026) deixou 2 vídeos pela
+    # metade no D1. Checar antes de gravar qualquer coisa. `chat()` com `hf:`
+    # lê exatamente `hugging_face_api_key` (HF_TOKEN não basta, ver .env.example).
+    from deutsch_pipeline.generation import llm_client
+
+    llm_client._ensure_env_loaded()
+    if args.model.startswith("hf:") and not os.environ.get("hugging_face_api_key"):
+        print("recusado: hugging_face_api_key ausente no ambiente/.env -- o modelo hf: precisa dela "
+              "(nada foi gravado).", file=sys.stderr)
+        return 2
     os.environ["D1_REMOTE"] = "1"
+    # list_playlist chama o executável `yt-dlp` por subprocess; com
+    # `.venv/bin/python` direto (sem ativar o venv) ele não está no PATH.
+    # A pasta do Python em uso vem primeiro, para achar o yt-dlp do mesmo venv.
+    os.environ["PATH"] = os.path.dirname(sys.executable) + os.pathsep + os.environ.get("PATH", "")
 
     from deutsch_pipeline.video.daily_batch import ingest_next_new_video
 
