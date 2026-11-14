@@ -264,6 +264,12 @@ Durante a rodada com Gemini, 4 tópicos (`Gebrauch von Zeiten der Vergangenheit`
 
 **Risco editorial aceito conscientemente, sem mecanismo de mitigação ainda**: sem curadoria humana, o RSS geral da DW traz qualquer notícia do dia — o primeiro lote incluiu temas pesados (guerra na Ucrânia, sentença de morte de Assad, terremoto na Colômbia, corte de recomendação de vacina infantil nos EUA). Não é bug, é a troca que "sem revisão por item" sempre implicava — se isso incomodar na prática, o próximo ajuste natural é filtrar por `<category>` do RSS antes de escolher (`generation/reading_sources.py`), não revisitado nesta fatia.
 
+**Revisitado em 14/11/2026 (Fase 4b) — decisão do usuário: sem filtro de tema.** Todos os temas ficam, porque têm o mesmo valor do ponto de vista linguístico. O levantamento que embasou a decisão está no `docs/19-plano-follow-up-fases.md`, seção 4b. Dois fatos de lá valem fora da decisão:
+- `<category>` do RSS da DW é a seção do site, não o tema, então nunca serviria de filtro editorial;
+- uma lista de palavras-chave refinada excluiria ~8% dos blocos.
+
+Não reabrir sem pedido do usuário. O docstring de `reading_sources.py` ainda sugere o filtro por `<category>`; ficou como está para não disparar redeploy do container por causa de um comentário.
+
 **Pendência de sustentabilidade, não urgente**: a playlist `dw_video_thema` tem 103 vídeos — a 8-10 novos por dia, esgota a fonte em ~10-12 dias. Quando isso acontecer, `video/daily_batch.py::pick_next_candidate` retorna `skipped` (não trava, só para de gerar vídeo novo até o dia seguinte tentar de novo achar algo, o que também vai falhar) — vale curar uma segunda playlist/canal permitido antes disso, mesmo padrão de curadoria de canal já estabelecido no docs/07.
 
 **Tag exata importa, não só o nome do modelo**: usar `mistral-small:22b-instruct-2409-q3_K_M` (~10GB), NÃO `mistral-small:latest`/`mistral-small` puro (tag padrão, quantização q4, ~14-15GB). A tag padrão trava por thrashing de swap em Mac de 16GB de RAM unificada — testado empiricamente, um único lote de geração não completou em 3h42min antes de ser abortado. `q3_K_M` roda sem esse problema. Se a máquina de geração mudar (mais RAM), pode valer revisitar a tag, mas não trocar de volta pra `latest` sem confirmar RAM disponível primeiro.
