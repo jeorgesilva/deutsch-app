@@ -66,6 +66,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 6.4 | `docs/observabilidade.md` | ✅ branch `docs/observabilidade` (aguarda aprovação) |
 | 6.5 | Subagentes no nível de projeto | 🟡 16 agentes + skill `sast-configuration` em `.claude/` (branch `chore/subagentes-projeto`, aguarda aprovação) · ⏳ commands/skills dos plugins não lidos · ⏳ decisão sobre Cloudflare no escopo de projeto |
 | 6.6 | Identidade por papel nas mensagens do Slack | ✅ só documentado em `docs/observabilidade.md` (sem caso concreto; ressalva: webhook de app pode ignorar `username`/`icon_emoji`) |
+| 6.7 | Revisão semanal de commits por agente, no Slack | 🟡 v1 em `ci/agentes-periodicos` (aguarda aprovação) · ⏳ usuário gerar o token e o secret, testar com `workflow_dispatch` · ⏳ v1.1 e 6.8 anotadas |
 
 Ordem sugerida: o bloqueador corre em paralelo (é do usuário). Depois vêm a Fase 3, a 6.1–6.4 (fecham a observabilidade que faltou neste incidente), a Fase 4, a 6.5–6.6 e por último a Fase 5. O usuário pode reordenar; a Fase 5 continua presa ao fechamento das Fases 1–4.
 
@@ -124,7 +125,7 @@ Feito em 14/11/2026: as quatro notas foram corrigidas (`npm test` sai com 0; vul
 
 ## Fase 6 — observabilidade, processo e time de agentes
 
-Definida numa sessão de planejamento externa. Implementar direto, em fatias. **Parar depois de cada sub-fase (6.1–6.6)** e mostrar o diff (na 6.5, a lista de agentes). Não commitar sem pedido.
+Definida numa sessão de planejamento externa. Implementar direto, em fatias. **Parar depois de cada sub-fase (6.1–6.7)** e mostrar o diff (na 6.5, a lista de agentes). Não commitar sem pedido.
 
 ### 6.1 — Dead man's switch no cron diário
 
@@ -198,3 +199,29 @@ Abaixo da lista literal, registrar à parte a correção da 6.1: o secret vai no
 - Quando um step reportar o resultado de um papel (por exemplo, `security-auditor` ou `unit-testing`), usar `username`/`icon_emoji` do papel (`🔒 Segurança` / `:lock:`, `🧪 QA` / `:test_tube:`).
 - É só rótulo visual: a mesma identidade de bot por baixo. Nada de @menção por agente nem resposta bidirecional.
 - Se não houver caso concreto agora (o mais provável), pular a implementação e só registrar em `docs/observabilidade.md` que o payload já aceita `username`/`icon_emoji` por mensagem.
+
+### 6.7 — Revisão semanal de commits por agente, com aviso no Slack
+
+Definida com o usuário em 14/11/2026, fatiada em v1 → v1.1 → 6.8.
+
+**Regra fixa para qualquer job periódico de agente (vale além da 6.7):** só leitura. `permissions: contents: read`, sem Edit/Write, sem abrir PR nem comentar. O guardrail de `data/raw/` e dos prompts few-shot vale pela permissão do token, não pela instrução do prompt, que é mais fácil de furar por acidente.
+
+**v1 (feita):** `.github/workflows/revisao-semanal.yml`.
+
+- Prompt genérico ("revise os commits dos últimos 7 dias no `main`, aponte problemas de qualidade/padrão"), **sem** referenciar `.claude/agents/*.md`. É o teste de fumaça do token, do Slack e da permissão.
+- Autenticação pela assinatura Pro: `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}` (gerado com `claude setup-token`), não `ANTHROPIC_API_KEY`. `github_token` é o `GITHUB_TOKEN` padrão, então não precisa do GitHub App do Claude.
+- `--model sonnet`, `--max-turns 30`, `timeout-minutes: 20`. Ferramentas: `Read`, `Grep`, `Glob` e só `git log`/`git show`/`git diff` no Bash.
+- Semana sem commit não chama o Claude: só avisa no Slack.
+- Slack: mesmo webhook e payload da 6.3, com identidade `🔍 Revisão semanal` / `:mag:`. Sai em sucesso, falha e semana vazia. O relatório é cortado em 3500 caracteres.
+- `display_report: "false"`: o repo é **público**, então o relatório vai só para o Slack, não para o Step Summary do run.
+- Frequência: semanal, segunda 07:00 UTC (`0 7 * * 1`). O `schedule` fica **comentado** até um `workflow_dispatch` passar, porque há relatos não verificados de 401 com token OAuth no Actions.
+- Pendente do usuário: `claude setup-token` local → secret `CLAUDE_CODE_OAUTH_TOKEN` no repo → disparo manual → descomentar o `schedule`.
+- Não verificado: o teto do crédito mensal de uso via `claude -p`/Agent SDK nos planos de assinatura. Acompanhar o consumo nas primeiras semanas.
+
+**v1.1 (próximo passo, depois que a v1 rodar):** trocar o prompt genérico por uma referência explícita a `comprehensive-review-code-reviewer` (já no `main` desde a PR #13), **mantendo `--model sonnet`** em vez do `opus` do frontmatter do agente. O `opus` fica para o `/full-review` manual.
+
+### 6.8 — Passada de segurança periódica (fase futura, não agora)
+
+- Job separado, mensal ou quinzenal, com `comprehensive-review-security-auditor` + a skill `sast-configuration`.
+- Identidade `🔒 Segurança` / `:lock:` da 6.6, agora com uso real e distinto da revisão semanal.
+- Mesma regra fixa de só leitura da 6.7.
