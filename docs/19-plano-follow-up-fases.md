@@ -80,7 +80,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 6.4 | `docs/observabilidade.md` | ✅ branch `docs/observabilidade` (aguarda aprovação) |
 | 6.5 | Subagentes no nível de projeto | 🟡 16 agentes + skill `sast-configuration` em `.claude/` (branch `chore/subagentes-projeto`, aguarda aprovação) · ⏳ commands/skills dos plugins não lidos · ⏳ decisão sobre Cloudflare no escopo de projeto |
 | 6.6 | Identidade por papel nas mensagens do Slack | ✅ só documentado em `docs/observabilidade.md` (sem caso concreto; ressalva: webhook de app pode ignorar `username`/`icon_emoji`) |
-| 6.7 | Revisão semanal de commits por agente, no Slack | 🟡 v1 em `ci/agentes-periodicos` (aguarda aprovação) · ⏳ usuário gerar o token e o secret, testar com `workflow_dispatch` · ⏳ v1.1 e 6.8 anotadas |
+| 6.7 | Revisão semanal de commits por agente, no Slack | ✅ v1 rodando: run manual ok em 14/11 (run 43611649525), `schedule` ativo · ⏳ v1.1 e 6.8 anotadas |
 
 Ordem sugerida: o bloqueador corre em paralelo (é do usuário). Depois vêm a Fase 3, a 6.1–6.4 (fecham a observabilidade que faltou neste incidente), a Fase 4, a 6.5–6.6 e por último a Fase 5. O usuário pode reordenar; a Fase 5 continua presa ao fechamento das Fases 1–4.
 
@@ -234,8 +234,8 @@ Definida com o usuário em 14/11/2026, fatiada em v1 → v1.1 → 6.8.
 - Semana sem commit não chama o Claude: só avisa no Slack.
 - Slack: mesmo webhook e payload da 6.3, com identidade `🔍 Revisão semanal` / `:mag:`. Sai em sucesso, falha e semana vazia. O relatório é cortado em 3500 caracteres.
 - `display_report: "false"`: o repo é **público**, então o relatório vai só para o Slack, não para o Step Summary do run.
-- Frequência: semanal, segunda 07:00 UTC (`0 7 * * 1`). O `schedule` fica **comentado** até um `workflow_dispatch` passar, porque há relatos não verificados de 401 com token OAuth no Actions.
-- Pendente do usuário: `claude setup-token` local → secret `CLAUDE_CODE_OAUTH_TOKEN` no repo → disparo manual → descomentar o `schedule`.
+- Frequência: semanal, segunda 07:00 UTC (`0 7 * * 1`). O `schedule` ficou comentado até um `workflow_dispatch` passar e foi ativado depois do run ok de 14/11.
+- Primeiro teste (14/11/2026): os dois runs iniciais deram `401 OAuth access token is invalid` porque o secret tinha um valor errado, e não por bug do caminho OAuth. Com o token regenerado, o run 43611649525 passou: 28 s, 5 turnos, `total_cost_usd` 0,19 (equivalente de API; na assinatura sai do crédito), sem negação de permissão e com 10 achados no Slack. Desde o PR #19, a mensagem de falha no Slack traz o texto do erro, que o action esconde no log.
 - Não verificado: o teto do crédito mensal de uso via `claude -p`/Agent SDK nos planos de assinatura. Acompanhar o consumo nas primeiras semanas.
 
 **v1.1 (próximo passo, depois que a v1 rodar):** trocar o prompt genérico por uma referência explícita a `comprehensive-review-code-reviewer` (já no `main` desde a PR #13), **mantendo `--model sonnet`** em vez do `opus` do frontmatter do agente. O `opus` fica para o `/full-review` manual.

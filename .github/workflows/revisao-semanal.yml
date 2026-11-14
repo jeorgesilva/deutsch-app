@@ -10,10 +10,10 @@
 name: Revisao semanal (agente)
 
 on:
-  # Primeiro testar so' com disparo manual (token + Slack + permissao). Depois
-  # de um run manual ok, descomentar o schedule: segunda 07:00 UTC.
-  # schedule:
-  #   - cron: "0 7 * * 1"
+  # Segunda 07:00 UTC. Ativado depois do run manual ok de 14/11/2026
+  # (run 43611649525); workflow_dispatch continua para disparo avulso.
+  schedule:
+    - cron: "0 7 * * 1"
   workflow_dispatch: {}
 
 permissions:
