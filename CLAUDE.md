@@ -62,7 +62,7 @@ docs/           planejamento, decisões, mockups/
 - Grupo D: texto por padrão, voz opcional por sessão; hostilidade só profissional (escada de exposição).
 - Home por categoria; "Revisão de hoje" (FSRS) é opção, não único fluxo.
 - Tópicos de regência fixa de Dativo e `Funktionsverbgefüge` exigem revisão humana.
-- Geração diária de vídeo/leitura sem curadoria por item.
+- Geração diária de vídeo/leitura sem curadoria por item, e sem filtro de tema no RSS: todos os temas têm o mesmo valor linguístico (14/11/2026).
 - Léxico: semear das frases curadas, sem lista de frequência básica. Vetores só quando virar feature real.
 
 ## O que NÃO fazer

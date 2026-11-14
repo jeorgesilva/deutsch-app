@@ -54,7 +54,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 0 | **Bloqueador:** acesso a Cloudflare Containers voltar e um deploy de container passar | 🟡 acesso ok + deploy de geração ok (13/11 23:42 UTC) · ⏳ deploy de fonética · ⏳ cron de 14/11 gravar |
 | 3 | Lacunas de documentação | ✅ branch `docs/fase-3-lacunas` (aguarda aprovação) |
 | 4a | Watchdog de jobs presos em `running` | ✅ branch `feat/watchdog-jobs` (aguarda aprovação) · timeout 90 s **depende da arquitetura**: revisar na 4c |
-| 4b | Filtro editorial mínimo no RSS de notícias | ⬜ |
+| 4b | Filtro editorial mínimo no RSS de notícias | ✅ decidido **sem filtro** (usuário, 14/11): todos os temas ficam; ver `docs/18` |
 | 4c | Geração sob demanda ponta a ponta | ⬜ (depende do bloqueador) |
 | 4d | Templates que nunca escalaram além do piloto | ⬜ |
 | 5a | Métricas no model card do corretor | ⬜ (só depois de 1–4) |
@@ -103,6 +103,12 @@ Feito em 14/11/2026: as quatro notas foram corrigidas (`npm test` sai com 0; vul
     - D1 remoto: a tabela está **vazia**, nunca houve job em produção.
     - **Causa provável do job preso:** `waitUntil` só estende a execução por **30 s depois da resposta** e depois cancela as promises pendentes (docs da Cloudflare, Workers → Context). Um lote real leva minutos (R1 levou ~230 s para 4 itens). Então o job é cancelado no meio, o `catch` nunca roda e o status fica em `running`. Num job de tamanho real isso é o esperado, não um caso raro. O watchdog só trata o sintoma; a correção de fundo é tirar o trabalho do `waitUntil` (Queues, Workflows ou o próprio container gravando no D1) e pertence à 4c.
 - **4b. Filtro editorial mínimo no RSS diário** (`generation/reading_sources.py`). Hoje não há curadoria e pode entrar tema pesado sem triagem. Coerente com a decisão fechada "geração diária sem curadoria por item": o filtro é automático (lista de exclusão ou classificação), não uma revisão humana por item. Testar contra dados reais antes de travar qualquer gate (regra do `pipeline/CLAUDE.md`).
+  - **Levantamento (14/11/2026):**
+    - `<category>` do RSS é a **seção** do site (Welt, Deutschland, Aktuelles, Sport, Kultur, Wirtschaft, Wissenschaft, Gesundheit, NRS-Import), não o tema. Tema pesado aparece espalhado por Aktuelles, Welt e Deutschland, então filtrar por categoria **não serve**.
+    - Base real: 275 blocos da DW no D1 (12/08–09/10) e o feed de 14/11 (91 itens; o código só olha os 30 primeiros).
+    - Lista de palavras-chave em 5 níveis: (A) morte/violência, (B) violência sexual, (C) desastre, (D) epidemia, (E) combate (ataque aéreo, drone, bombardeio), **sem** o `Krieg` genérico. Medida, ela exclui **8%** do D1 (23/275) e **7%** do feed (6/91). Com `Krieg`/`Angriff`/`Kampf` genéricos subia para 16%, com falsos positivos como "Cyber-Angriff", "Microsoft kämpft" e "Kampf für Freiheit".
+    - **Decisão do usuário (14/11/2026): sem filtro.** Todos os temas são igualmente importantes do ponto de vista linguístico. Nada foi implementado; os números abaixo ficam só como registro.
+    - Erros vistos: ~8 dos 23 excluídos são de fronteira (sabotagem do Nord Stream, crítica de série sobre o Breitscheidplatz, lembrança do Holocausto), ou seja, o filtro erra para o lado de excluir demais. Furos: `töten`, `Todesfälle`, `sterben`, `Gewalt gegen …`.
 - **4c. Geração sob demanda ponta a ponta.** Nunca rodou em produção (`docs/17-auditoria-projeto.md`). Depende da Fase 0. Documentar o resultado real, inclusive se falhar.
   - Esperado pelo levantamento da 4a: na arquitetura atual (`waitUntil`) o job morre ~30 s depois da resposta e o watchdog o marca `failed` em 90 s. Escolher com o usuário para onde o job vai (Queues, Workflows ou o próprio container gravando no D1) e, **na mesma mudança**, subir `JOB_TIMEOUT_SECONDS` (`topicRegeneration.ts`) e `REGEN_POLL_MAX_MS` (`app.js`) para a duração real de um lote (ordem de 15 min).
 - **4d. Templates/engines que nunca escalaram além do piloto.** Levantar e **propor** se escalam ou são descontinuados, sem decidir sozinho.
