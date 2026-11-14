@@ -26,12 +26,13 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 
 ## Estado do repo (14/11/2026)
 
-- `origin/main` em `01b1dc6` (merge do PR #15, 14/11/2026 ~02:10 UTC).
+- `origin/main` em `ba19b7d` (merge do PR #21, 14/11/2026 à tarde).
+- PRs #17–#21 (14/11): #17 batch diário vira `DailyBatchWorkflow` + docs da 4d; #18 script local de vídeo; #19–#20 revisão semanal (6.7); #21 board do GitHub Project #2.
 - PR #5 (`424b12f`): fix do `schema_class` no container, `schemas.py` no vendor, `vendor-files.txt` + `pipeline/tests/test_vendor_manifest.py`.
 - PR #6 (`554601b`): `scheduled()` passa a logar o resumo do batch diário e as falhas; aviso quando `CLOUDFLARE_API_TOKEN` está ausente. Feito em outra sessão.
 - PR #7: este plano.
 - PRs #8–#15 (14/11), uma branch por fatia: Fase 3, 6.1, 6.2, 6.3, 6.4, 6.5+6.6, 4a e 4b.
-- **Deploys de 14/11:** fonética passou às 01:48 UTC (disparo manual; a imagem anterior era de 09/08); geração passou com o merge do #9 (heartbeat). O Pages **não** foi publicado: o watchdog da 4a está em `main`, mas ainda não está no ar.
+- **Deploys de 14/11:** fonética passou às 01:48 UTC (disparo manual; a imagem anterior era de 09/08); geração passou com o merge do #9 (heartbeat) e de novo com o #17 (~15:22 UTC, aprovado no environment `production`, aviso no Slack ok). No deploy do #17, o wrangler aplicou a remoção do cron `0 4 * * *` do Worker, e `wrangler workflows list` mostra `deutsch-daily-batch`. O Pages **não** foi publicado: o watchdog da 4a está em `main`, mas ainda não está no ar.
 - Merge de PR empilhado: fazer o merge, mudar a base do PR seguinte para `main` e **só depois** apagar a branch. Apagar antes faz o GitHub fechar o PR seguinte. Depois de mudar a base, fechar e reabrir o PR, porque o `verify.yml` não dispara com a troca de base.
 - Ferramentas disponíveis na máquina: `gh` autenticado (`jeorgesilva`); `wrangler` autenticado; MCP do Cloudflare configurado (só carrega numa sessão nova).
 
@@ -43,7 +44,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
   - Mudanças **só no Worker TS** (`src/index.ts`) chegam a produção mesmo com o deploy falhando, porque o upload do script acontece antes do envio da imagem.
 - O segredo `CLOUDFLARE_DEPLOY_API_TOKEN` **não existe** no GitHub. O workflow cai sempre em `CLOUDFLARE_API_TOKEN` (trocado em 18/10). Só existem `CLOUDFLARE_API_TOKEN` e `HF_TOKEN`.
 - Duração típica dos runs: `verify.yml` ~50 s; deploy de geração ~1 min 30 s quando falha (3–6 min quando passa); deploy de fonética ~2 min 30 s quando falha.
-- O cron de 04:00 UTC roda no `scheduled()` do **Worker TS** ([services/generation-container/src/index.ts](../services/generation-container/src/index.ts)), que chama o container item por item (`/generate-video-item`, `/generate-reading-item`). Não há loop de cron em Python.
+- O batch das 04:00 UTC é o `DailyBatchWorkflow` do **Worker TS** ([services/generation-container/src/index.ts](../services/generation-container/src/index.ts)), desde o deploy do #17 em 14/11. Até então era o `scheduled()` de um Cron Trigger. O workflow chama o container item por item, **só** `/generate-reading-item`. Não há loop de cron em Python.
 - `video_clips` não tem `created_at`. Para datar o conteúdo diário, usar `exercises.created_at` (com `video_clip_id`) e `reading_blocks.created_at`.
 - O `/health` do Worker responde `ok` sem tocar no container; ele não prova que o container sobe.
 - **O cron diário roda de novo desde 14/11** (5 `reading_blocks` e 179 `exercises` entre 04:02 e 04:15 UTC). Mas ele **é cortado aos 15 min todo dia**: o limite de duração de um Cron Trigger é 15 min (docs da Cloudflare, Workers → Limits). O último registro sai sempre entre 04:13 e 04:17, hoje e de 05/10 a 09/10. Cada bloco de leitura leva ~2,5 min, então entram 4–6 por dia, nunca os 10 que o código pretende. Como a execução morre no meio, o `.then(...)` do `scheduled()` não roda: **não sai o log do resumo nem o ping do healthchecks** (o check fica "atrasado" todo dia). Isso é estrutural e existe desde o início do cron; não é regressão.
@@ -57,6 +58,12 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
   2. **O vídeo sai do batch automático na nuvem.** É remoção, não feature flag: não existe cenário em que o vídeo automático funcione do IP do container hoje. A leitura continua 100% automática.
   3. **A ingestão de vídeo vira um script local**, rodado à mão pelo usuário do IP residencial, em lote (vários candidatos por execução; semanal basta, já que existem ~1.000 clipes). O script reaproveita o pipeline existente sem duplicar lógica e grava no D1 de produção pelo `wrangler --remote`, com a sessão OAuth local, sem `D1_HTTP_API_TOKEN`.
   - O environment `production` foi criado com o usuário como revisor (14/11).
+- **1ª rodada real do script local de vídeo (14/11, `--count 2`):** a legenda baixou do IP residencial **sem 429**, o que confirma a causa no IP do container. A rodada falhou duas vezes antes de concluir:
+  - na primeira, `yt-dlp` não estava no `PATH`, porque o venv não estava ativado; nada foi gravado;
+  - na segunda, faltava `hugging_face_api_key` no `.env`. O pipeline grava o clipe, os segmentos e os exercícios sem LLM (legendar/dictation) **antes** do LLM, então os vídeos 1024 e 1074 ficaram pela metade.
+
+  Os dois foram completados à mão com os CLIs por etapa (`generate_video_exercises --engine citar` e `generate_video_comprehension --engine …`), sem duplicar nada. O script ganhou as duas correções no PR #18: o `PATH` passa a começar pela pasta do Python em uso, e o script recusa rodar sem a chave, antes de qualquer escrita.
+  - `chat()` com modelo `hf:` lê **exatamente** `hugging_face_api_key`; `HF_TOKEN` não basta. No `.env` local, a chave é a do token HF `corretor_c1_Alemao`, que tem permissão de Inference Providers. O container usa outro token, o `deutsch_app_c1`, pelo secret `HUGGINGFACE_API_KEY`.
 
 ## Tabela de estado
 
@@ -71,7 +78,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 4a | Watchdog de jobs presos em `running` | ✅ PR #14 · timeout 90 s **depende da arquitetura**: revisar na 4c |
 | 4b | Filtro editorial mínimo no RSS de notícias | ✅ decidido **sem filtro** (usuário, 14/11): todos os temas ficam; ver `docs/18` |
 | 4c | Geração sob demanda ponta a ponta | ⬜ bloqueador resolvido · `start.ts` ainda em `waitUntil`; mesma decisão de arquitetura do `DailyBatchWorkflow`, mas outro código (Pages Function) |
-| 4d | Templates que nunca escalaram além do piloto | 🟡 levantamento feito (branch `docs/fase-4d-templates`) · ⏳ decisão do usuário por grupo |
+| 4d | Templates que nunca escalaram além do piloto | 🟡 levantamento feito (entrou no PR #17, seção 4d abaixo) · ⏳ decisão do usuário por grupo |
 | 5a | Métricas no model card do corretor | ⬜ (só depois de 1–4) |
 | 5b | Demo sem fricção do corretor | ⬜ |
 | 5c | Corretor como feature do deutsch-app | ⬜ |
@@ -85,7 +92,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 6.7 v1.1 | Prompt via `comprehensive-review-code-reviewer`, com sonnet | ⬜ |
 | 6.8 | Passada de segurança periódica | ⬜ fase futura |
 | 429-a | Incidente do vídeo: batch diário vira `DailyBatchWorkflow` | 🟡 PR #17, deploy ok 14/11 · ⏳ conferir o 1º run agendado (15/11 04:00 UTC) |
-| 429-b | Incidente do vídeo: ingestão de vídeo local | 🟡 PR #18 · ⏳ primeira execução real pelo usuário |
+| 429-b | Incidente do vídeo: ingestão de vídeo local | 🟡 PR #18 (com as correções de `PATH` e da chave) · 1ª rodada real em 14/11: legenda ok do IP residencial, 2 vídeos completados à mão (ver "Fatos") · ⏳ uma rodada completa do script, sem intervenção |
 | Prev. 2 | Prevenção camada 2: `/health/container` checado no deploy | ⬜ |
 | Aud. §3 | `ShadowingEngine` nasce fora das migrations (`docs/17` §3) | ⬜ conferido 14/11: nenhuma migration insere a linha |
 | Aud. §8 | Backlog antigo da auditoria (`docs/17` §8) | ⬜ histórico, não em andamento |
