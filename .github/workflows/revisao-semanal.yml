@@ -86,7 +86,11 @@ jobs:
           if [ "$COMMIT_COUNT" = "0" ]; then
             body="Sem commits no main nos últimos 7 dias."
           elif [ "$JOB_STATUS" != "success" ]; then
-            body="❌ revisão falhou ($JOB_STATUS) -- ver o log do run."
+            # O action esconde o texto do erro no log (repo publico); o
+            # execution_file guarda, entao o motivo vai so' para o Slack.
+            err=""
+            [ -f "$EXECUTION_FILE" ] && err=$(jq -r '[.[] | select(.type == "result")] | last | .result // empty' "$EXECUTION_FILE" | head -c 500)
+            body="❌ revisão falhou ($JOB_STATUS)${err:+: $err}"
           else
             # Ultima mensagem "result" do execution_file; corta em 3500
             # caracteres para caber folgado numa mensagem do Slack.
