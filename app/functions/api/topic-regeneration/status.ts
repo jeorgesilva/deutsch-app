@@ -2,6 +2,7 @@
 // enquanto o job roda em background (docs/14: "sem travar esperando
 // síncrono").
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
+import { expireStaleJobs } from "../../_lib/topicRegeneration";
 import { Env } from "../../_lib/types";
 
 interface JobRow {
@@ -22,6 +23,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   if (!Number.isInteger(jobId)) {
     return Response.json({ error: "job_id inválido" }, { status: 400 });
   }
+
+  // Fase 4a -- o polling e' quem descobre o job morto (ver JOB_TIMEOUT_SECONDS).
+  await expireStaleJobs(env.DB, user.id, jobId);
 
   const job = await env.DB.prepare(
     `SELECT id, content_topic_id, status, requested_at, completed_at, error
