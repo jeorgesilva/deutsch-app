@@ -18,3 +18,6 @@ recordings/
 
 # notas locais, nunca versionar
 projeto_completo.txt
+
+# saída do comando /full-review (.claude/commands/full-review.md)
+.full-review/
