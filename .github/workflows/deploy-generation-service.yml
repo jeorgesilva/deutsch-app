@@ -24,6 +24,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Fase 6.2 -- gate de aprovacao. So' bloqueia depois de configurar
+    # Required reviewers em Settings -> Environments -> production (UI);
+    # sem isso o job roda direto, como antes.
+    environment: production
     defaults:
       run:
         working-directory: services/generation-container
