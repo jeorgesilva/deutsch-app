@@ -17,6 +17,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Fase 6.2 -- mesmo gate do deploy-generation-service.yml.
+    environment: production
     defaults:
       run:
         working-directory: services/phonetic-container

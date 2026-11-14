@@ -61,7 +61,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 5b | Demo sem fricção do corretor | ⬜ |
 | 5c | Corretor como feature do deutsch-app | ⬜ |
 | 6.1 | Dead man's switch no cron | ✅ branch `docs/fase-3-lacunas` (aguarda aprovação) · ⏳ usuário criar o check e o secret |
-| 6.2 | `environment: production` nos deploys | ⬜ |
+| 6.2 | `environment: production` nos deploys | ✅ branch `ci/environment-production` (aguarda aprovação) · ⏳ usuário configurar reviewer na UI |
 | 6.3 | Notificação de deploy no Slack | ⬜ |
 | 6.4 | `docs/observabilidade.md` | ⬜ |
 | 6.5 | Subagentes no nível de projeto | ⬜ |
@@ -129,7 +129,7 @@ Definida numa sessão de planejamento externa. Implementar direto, em fatias. **
 
 ### 6.2 — Gate de aprovação antes de produção
 
-- Adicionar `environment: production` no job de deploy de `.github/workflows/deploy-generation-service.yml` e de `deploy-phonetic-service.yml`. Não há workflow separado de deploy do app (só existem esses dois mais o `verify.yml`). O deploy do app (Pages) não passa pelo Actions; não verifiquei como é feito hoje.
+- Adicionar `environment: production` no job de deploy de `.github/workflows/deploy-generation-service.yml` e de `deploy-phonetic-service.yml`. Não há workflow separado de deploy do app (só existem esses dois mais o `verify.yml`). O deploy do app (Pages) não passa pelo Actions: `wrangler pages project list` (14/11/2026) mostra `deutsch-app` sem Git conectado ("Git Provider: No"), então é upload direto manual (`wrangler pages deploy`), último há ~3 meses. Fica fora do gate.
 - Não mexer em branch protection nem em Settings via `gh`; fica como pendência na UI.
 - Atenção: sem reviewer configurado, o environment não bloqueia nada. Com reviewer, todo push em `main` que toque `pipeline/src/**` passa a esperar aprovação manual.
 
