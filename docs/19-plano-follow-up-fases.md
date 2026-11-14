@@ -53,7 +53,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 2+ | Cron falhando em silêncio: logs no `scheduled()` | ✅ PR #6 |
 | 0 | **Bloqueador:** acesso a Cloudflare Containers voltar e um deploy de container passar | 🟡 acesso ok + deploy de geração ok (13/11 23:42 UTC) · ⏳ deploy de fonética · ⏳ cron de 14/11 gravar |
 | 3 | Lacunas de documentação | ✅ branch `docs/fase-3-lacunas` (aguarda aprovação) |
-| 4a | Watchdog de jobs presos em `running` | ⬜ |
+| 4a | Watchdog de jobs presos em `running` | ✅ branch `feat/watchdog-jobs` (aguarda aprovação) · timeout 90 s **depende da arquitetura**: revisar na 4c |
 | 4b | Filtro editorial mínimo no RSS de notícias | ⬜ |
 | 4c | Geração sob demanda ponta a ponta | ⬜ (depende do bloqueador) |
 | 4d | Templates que nunca escalaram além do piloto | ⬜ |
@@ -96,8 +96,15 @@ Feito em 14/11/2026: as quatro notas foram corrigidas (`npm test` sai com 0; vul
 ## Fase 4 — pendências estruturais (uma sub-tarefa por vez)
 
 - **4a. Watchdog para jobs de geração travados em `running`.** Hoje não existe. Primeiro levantar onde o status `running` é gravado (tabela de jobs da geração sob demanda) e propor um critério de timeout e o lugar onde roda (o próprio `scheduled()` é um candidato).
+  - **Levantamento (14/11/2026):**
+    - Tabela: `topic_regeneration_jobs` (migration 0013). Tem só `requested_at` e `completed_at`, sem `started_at`.
+    - Fluxo: `POST /api/topic-regeneration/start` grava `pending`, responde e roda `runRegenerationJob` dentro de `waitUntil`. O job grava `running`, chama `/generate-topic` uma vez por engine (até 6, cada chamada sem timeout) e termina em `done`/`failed`.
+    - Frontend: `pollRegenerationJob` (`app.js`) refaz o polling a cada 4 s **sem limite** enquanto o status for `pending` ou `running`.
+    - D1 remoto: a tabela está **vazia**, nunca houve job em produção.
+    - **Causa provável do job preso:** `waitUntil` só estende a execução por **30 s depois da resposta** e depois cancela as promises pendentes (docs da Cloudflare, Workers → Context). Um lote real leva minutos (R1 levou ~230 s para 4 itens). Então o job é cancelado no meio, o `catch` nunca roda e o status fica em `running`. Num job de tamanho real isso é o esperado, não um caso raro. O watchdog só trata o sintoma; a correção de fundo é tirar o trabalho do `waitUntil` (Queues, Workflows ou o próprio container gravando no D1) e pertence à 4c.
 - **4b. Filtro editorial mínimo no RSS diário** (`generation/reading_sources.py`). Hoje não há curadoria e pode entrar tema pesado sem triagem. Coerente com a decisão fechada "geração diária sem curadoria por item": o filtro é automático (lista de exclusão ou classificação), não uma revisão humana por item. Testar contra dados reais antes de travar qualquer gate (regra do `pipeline/CLAUDE.md`).
 - **4c. Geração sob demanda ponta a ponta.** Nunca rodou em produção (`docs/17-auditoria-projeto.md`). Depende da Fase 0. Documentar o resultado real, inclusive se falhar.
+  - Esperado pelo levantamento da 4a: na arquitetura atual (`waitUntil`) o job morre ~30 s depois da resposta e o watchdog o marca `failed` em 90 s. Escolher com o usuário para onde o job vai (Queues, Workflows ou o próprio container gravando no D1) e, **na mesma mudança**, subir `JOB_TIMEOUT_SECONDS` (`topicRegeneration.ts`) e `REGEN_POLL_MAX_MS` (`app.js`) para a duração real de um lote (ordem de 15 min).
 - **4d. Templates/engines que nunca escalaram além do piloto.** Levantar e **propor** se escalam ou são descontinuados, sem decidir sozinho.
 - **Prevenção camadas 2 e 3** (do incidente de 13/11):
   - Camada 2, checagem do `/health` depois do deploy: o `/health` atual não toca no container, então primeiro criar uma rota que exija o container de pé (por exemplo `/health/container`) e só então checá-la no workflow. Pode se juntar à 6.3.

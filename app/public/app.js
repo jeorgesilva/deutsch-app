@@ -518,13 +518,27 @@ function setupRegenerationInteraction() {
   });
 }
 
-async function pollRegenerationJob(panel, jobId) {
-  const res = await fetch(`/api/topic-regeneration/status?job_id=${jobId}`);
-  const data = await res.json();
-  const job = data.job;
+// Fase 4a -- teto do polling. O watchdog do servidor (JOB_TIMEOUT_SECONDS
+// em topicRegeneration.ts) ja devolve "failed" depois de 90 s; isto so'
+// age se o proprio /status estiver falhando (500, sem job), que antes
+// girava pra sempre. Dobro do timeout do servidor -- revisar junto com ele.
+const REGEN_POLL_MAX_MS = 3 * 60 * 1000;
+
+async function pollRegenerationJob(panel, jobId, startedAt = Date.now()) {
+  let job = null;
+  try {
+    const res = await fetch(`/api/topic-regeneration/status?job_id=${jobId}`);
+    job = (await res.json()).job;
+  } catch {
+    // rede/JSON -- trata como "sem resposta" e deixa o teto decidir
+  }
 
   if (!job || job.status === "pending" || job.status === "running") {
-    setTimeout(() => pollRegenerationJob(panel, jobId), 4000);
+    if (Date.now() - startedAt > REGEN_POLL_MAX_MS) {
+      panel.innerHTML = `<p class="error">A geração não respondeu. Tente de novo mais tarde.</p>`;
+      return;
+    }
+    setTimeout(() => pollRegenerationJob(panel, jobId, startedAt), 4000);
     return;
   }
 

@@ -10,7 +10,7 @@
 - Ao adicionar template: `types.ts` (`SUPPORTED_TEMPLATES` e conjuntos de áudio), `grading.ts` (o `switch` não é exaustivo — esquecer um case só aparece como 500 em runtime), e o renderizador em `public/app.js`.
 - `user_id` existe em `attempts`/`progress`/`session_plans`/`roleplay_sessions`/`video_mining_notes`. Tabelas de conteúdo não têm dono. `phoneme_scores` herda o dono via JOIN com `attempts`.
 - `attempts.correct` é `NULL` (não `false`) para engines sem correção binária.
-- `topic_regeneration_jobs` não tem watchdog: job pode ficar em `running` para sempre.
+- `topic_regeneration_jobs`: o job roda em `waitUntil`, que a Cloudflare corta ~30 s depois da resposta, então lote real morre no meio. Watchdog preguiçoso (`expireStaleJobs`, chamado em `status.ts` e `start.ts`) marca `failed` o que passar de `JOB_TIMEOUT_SECONDS` (90 s). Esse número depende de onde o job roda: subir junto quando a Fase 4c tirar o job do `waitUntil`.
 
 ## Frontend (`public/`)
 

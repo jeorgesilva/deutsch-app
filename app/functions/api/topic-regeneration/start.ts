@@ -4,7 +4,7 @@
 // GET /api/topic-regeneration/status?job_id=.
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
 import { estimateRegeneration } from "../../_lib/topicRegeneration";
-import { runRegenerationJob, startRegenerationJob } from "../../_lib/topicRegeneration";
+import { expireStaleJobs, runRegenerationJob, startRegenerationJob } from "../../_lib/topicRegeneration";
 import { Env } from "../../_lib/types";
 
 interface StartBody {
@@ -25,6 +25,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
   if (!estimate || estimate.engines.length === 0) {
     return Response.json({ error: "nenhum formato de exercício mapeado pra esse tópico" }, { status: 400 });
   }
+
+  // Fase 4a -- fecha jobs vencidos que ninguem mais consulta (aba fechada).
+  await expireStaleJobs(env.DB, user.id);
 
   const jobId = await startRegenerationJob(env, user.id, contentTopicId);
   waitUntil(runRegenerationJob(env, jobId, contentTopicId));

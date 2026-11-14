@@ -30,6 +30,31 @@ export const REGENERATION_ENGINES = [
 const DEFAULT_MODEL = "hf:deepseek-ai/DeepSeek-V3";
 const N_PER_TOPIC = 5;
 
+// Fase 4a -- watchdog. O job roda em waitUntil (start.ts), que a Cloudflare
+// cancela ~30 s depois da resposta; o catch abaixo nunca roda e o status
+// ficaria em pending/running pra sempre. 90 s = 30 s do waitUntil + margem
+// de cold start/round-trip -- passado isso o job JA morreu, nao ha trabalho
+// legitimo a esperar. DEPENDE DA ARQUITETURA: quando a 4c tirar o job do
+// waitUntil (Queues/Workflows/container), um lote real leva minutos e este
+// numero precisa subir (ordem de 15 min). Revisar junto com a 4c.
+export const JOB_TIMEOUT_SECONDS = 90;
+
+// Marca como failed os jobs vencidos; o filtro de status no proprio UPDATE
+// evita sobrescrever um job que terminou no mesmo instante. Sem jobId,
+// varre todos os jobs vencidos do usuario.
+export async function expireStaleJobs(db: D1Database, userId: number, jobId?: number): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE topic_regeneration_jobs
+       SET status = 'failed', error = 'timeout (watchdog): o job parou sem concluir', completed_at = datetime('now')
+       WHERE user_id = ? AND (? IS NULL OR id = ?)
+         AND status IN ('pending', 'running')
+         AND requested_at < datetime('now', ?)`
+    )
+    .bind(userId, jobId ?? null, jobId ?? null, `-${JOB_TIMEOUT_SECONDS} seconds`)
+    .run();
+}
+
 export interface RegenerationEstimate {
   content_topic_id: number;
   topico: string;
@@ -95,7 +120,9 @@ export async function runRegenerationJob(env: Env, jobId: number, contentTopicId
     const serviceUrl = env.GENERATION_SERVICE_URL;
     if (!serviceUrl) throw new Error("GENERATION_SERVICE_URL não configurado");
 
-    await env.DB.prepare(`UPDATE topic_regeneration_jobs SET status = 'running' WHERE id = ?`)
+    // status = 'pending' no WHERE: nunca ressuscita um job que o watchdog ja
+    // marcou como failed.
+    await env.DB.prepare(`UPDATE topic_regeneration_jobs SET status = 'running' WHERE id = ? AND status = 'pending'`)
       .bind(jobId)
       .run();
 
