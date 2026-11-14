@@ -63,7 +63,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 6.1 | Dead man's switch no cron | ✅ branch `docs/fase-3-lacunas` (aguarda aprovação) · ⏳ usuário criar o check e o secret |
 | 6.2 | `environment: production` nos deploys | ✅ branch `ci/environment-production` (aguarda aprovação) · ⏳ usuário configurar reviewer na UI |
 | 6.3 | Notificação de deploy no Slack | ✅ branch `ci/slack-deploy` (aguarda aprovação) · ⏳ usuário criar o webhook e o secret |
-| 6.4 | `docs/observabilidade.md` | ⬜ |
+| 6.4 | `docs/observabilidade.md` | ✅ branch `docs/observabilidade` (aguarda aprovação) |
 | 6.5 | Subagentes no nível de projeto | ⬜ |
 | 6.6 | Identidade por papel nas mensagens do Slack | ⬜ (provavelmente só documentar) |
 
