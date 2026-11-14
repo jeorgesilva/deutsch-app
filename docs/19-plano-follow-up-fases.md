@@ -15,6 +15,7 @@ Prompt de partida sugerido:
 
 Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 
+- **Board:** o GitHub Project [deutsch-app — fases](https://github.com/users/jeorgesilva/projects/2) (#2) espelha a tabela de estado, com um cartão por linha, campo `Status` (Todo / Em andamento / Bloqueado / Feito) e campo `Origem` (seção do doc). O doc é a fonte de verdade. Todo commit que muda o estado de uma linha também atualiza o cartão correspondente no mesmo PR (`gh project item-edit`), e linha nova ganha cartão novo. Os cartões são draft items, sem issue, e nada os move sozinho.
 - Branch nova a partir de `main` para cada leva de trabalho; nunca direto em `main`.
 - Fatias pequenas; **parar e esperar aprovação** depois de cada fase ou sub-fase, mostrando o diff.
 - Commit só quando o usuário pedir. Código, comentários e docs em português.
@@ -65,22 +66,30 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 2 | `ENGINE_SCHEMAS` + `schema_class` no `generation/service.py`; `schemas.py` no vendor | ✅ código em `main` · ⏳ deploy depende de Containers voltar |
 | 2+ | Prevenção camada 1: manifesto de vendor + teste | ✅ PR #5 |
 | 2+ | Cron falhando em silêncio: logs no `scheduled()` | ✅ PR #6 |
-| 0 | **Bloqueador:** acesso a Cloudflare Containers voltar e um deploy de container passar | 🟡 acesso ok · deploys de geração e fonética ok (14/11) · ⏳ cron de 14/11 04:00 UTC gravar no D1 |
-| 3 | Lacunas de documentação | ✅ branch `docs/fase-3-lacunas` (aguarda aprovação) |
-| 4a | Watchdog de jobs presos em `running` | ✅ branch `feat/watchdog-jobs` (aguarda aprovação) · timeout 90 s **depende da arquitetura**: revisar na 4c |
+| 0 | **Bloqueador:** acesso a Cloudflare Containers voltar e um deploy de container passar | ✅ acesso ok · deploys de geração e fonética ok (14/11) · cron gravou 5 `reading_blocks` no D1 em 14/11 |
+| 3 | Lacunas de documentação | ✅ PR #8 |
+| 4a | Watchdog de jobs presos em `running` | ✅ PR #14 · timeout 90 s **depende da arquitetura**: revisar na 4c |
 | 4b | Filtro editorial mínimo no RSS de notícias | ✅ decidido **sem filtro** (usuário, 14/11): todos os temas ficam; ver `docs/18` |
-| 4c | Geração sob demanda ponta a ponta | ⬜ (depende do bloqueador) |
+| 4c | Geração sob demanda ponta a ponta | ⬜ bloqueador resolvido · `start.ts` ainda em `waitUntil`; mesma decisão de arquitetura do `DailyBatchWorkflow`, mas outro código (Pages Function) |
 | 4d | Templates que nunca escalaram além do piloto | 🟡 levantamento feito (branch `docs/fase-4d-templates`) · ⏳ decisão do usuário por grupo |
 | 5a | Métricas no model card do corretor | ⬜ (só depois de 1–4) |
 | 5b | Demo sem fricção do corretor | ⬜ |
 | 5c | Corretor como feature do deutsch-app | ⬜ |
-| 6.1 | Dead man's switch no cron | ✅ branch `docs/fase-3-lacunas` (aguarda aprovação) · ⏳ usuário criar o check e o secret |
-| 6.2 | `environment: production` nos deploys | ✅ branch `ci/environment-production` (aguarda aprovação) · ⏳ usuário configurar reviewer na UI |
-| 6.3 | Notificação de deploy no Slack | ✅ branch `ci/slack-deploy` (aguarda aprovação) · ⏳ usuário criar o webhook e o secret |
-| 6.4 | `docs/observabilidade.md` | ✅ branch `docs/observabilidade` (aguarda aprovação) |
-| 6.5 | Subagentes no nível de projeto | 🟡 16 agentes + skill `sast-configuration` em `.claude/` (branch `chore/subagentes-projeto`, aguarda aprovação) · ⏳ commands/skills dos plugins não lidos · ⏳ decisão sobre Cloudflare no escopo de projeto |
+| 6.1 | Dead man's switch no cron | ✅ PR #9 · check e secret configurados (14/11) |
+| 6.2 | `environment: production` nos deploys | ✅ PR #10 · environment `production` com o usuário como revisor (14/11) |
+| 6.3 | Notificação de deploy no Slack | ✅ PR #11 · webhook funcionando (14/11) |
+| 6.4 | `docs/observabilidade.md` | ✅ PR #12 · ⏳ Sentry (caminho novo em `docs/observabilidade.md`) |
+| 6.5 | Subagentes no nível de projeto | ✅ PR #13 · commands/skills escolhidos e Cloudflare no escopo de usuário (`.claude/CLAUDE.md`) |
 | 6.6 | Identidade por papel nas mensagens do Slack | ✅ só documentado em `docs/observabilidade.md` (sem caso concreto; ressalva: webhook de app pode ignorar `username`/`icon_emoji`) |
 | 6.7 | Revisão semanal de commits por agente, no Slack | ✅ v1 rodando: run manual ok em 14/11 (run 43611649525), `schedule` ativo · ⏳ v1.1 e 6.8 anotadas |
+| 6.7 v1.1 | Prompt via `comprehensive-review-code-reviewer`, com sonnet | ⬜ |
+| 6.8 | Passada de segurança periódica | ⬜ fase futura |
+| 429-a | Incidente do vídeo: batch diário vira `DailyBatchWorkflow` | 🟡 PR #17, deploy ok 14/11 · ⏳ conferir o 1º run agendado (15/11 04:00 UTC) |
+| 429-b | Incidente do vídeo: ingestão de vídeo local | 🟡 PR #18 · ⏳ primeira execução real pelo usuário |
+| Prev. 2 | Prevenção camada 2: `/health/container` checado no deploy | ⬜ |
+| Aud. §3 | `ShadowingEngine` nasce fora das migrations (`docs/17` §3) | ⬜ conferido 14/11: nenhuma migration insere a linha |
+| Aud. §8 | Backlog antigo da auditoria (`docs/17` §8) | ⬜ histórico, não em andamento |
+| Rev. 14/11 | Achados da 1ª revisão semanal (Slack, run 43611649525) | ⬜ do agente, não verificados no código |
 
 Ordem sugerida: o bloqueador corre em paralelo (é do usuário). Depois vêm a Fase 3, a 6.1–6.4 (fecham a observabilidade que faltou neste incidente), a Fase 4, a 6.5–6.6 e por último a Fase 5. O usuário pode reordenar; a Fase 5 continua presa ao fechamento das Fases 1–4.
 
