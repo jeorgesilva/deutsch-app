@@ -25,13 +25,13 @@ docs/           planejamento, decisões, mockups/
 
 - `scripts/verify.sh` — gate local: tsc, vitest (`--passWithNoTests`), ruff `--select F` em `pipeline/`, pytest. Exit ≠ 0 se qualquer passo falhar.
 - `cd app && npx tsc --noEmit` — passa.
-- `cd app && npm test` (vitest) — falha hoje: não há arquivo de teste TS (o script não passa `--passWithNoTests`; o `verify.sh` passa).
+- `cd app && npm test` (vitest `--passWithNoTests`) — sai com 0; ainda não há arquivo de teste TS.
 - `.venv/bin/python -m pytest pipeline -q` — testes do pipeline. `pipeline/tests/conftest.py` bloqueia rede (inclusive localhost), subprocess e variáveis de API/D1; teste novo mocka a função de alto nível, nunca afrouxa a guarda.
 - Não há Makefile.
 - Pipeline (não instalado como pacote): `PYTHONPATH=pipeline/src .venv/bin/python -m deutsch_pipeline.<pkg>.<mod>`, a partir da raiz.
 - `cd app && npm run dev` — exige `app/.dev.vars` (gitignored, não existe no checkout).
 - Migrations: os scripts `db:*` do `package.json` cobrem só as três primeiras; as demais são aplicadas à mão (ver `app/CLAUDE.md`).
-- CI (`verify.yml`): depcheck tem `|| true`; promptfoo só checa nome de campo; vulture não foi verificado localmente (não está na `.venv`).
+- CI (`verify.yml`): depcheck tem `|| true`; promptfoo só checa nome de campo; vulture (`PYTHONPATH=. .venv/bin/vulture pipeline/ vulture_whitelist.py`) passa localmente desde 14/11/2026 — símbolo chamado só dinamicamente entra no `vulture_whitelist.py`.
 
 ## Convenções que divergem do padrão
 

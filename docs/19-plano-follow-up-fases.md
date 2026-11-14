@@ -51,8 +51,8 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 2 | `ENGINE_SCHEMAS` + `schema_class` no `generation/service.py`; `schemas.py` no vendor | ✅ código em `main` · ⏳ deploy depende de Containers voltar |
 | 2+ | Prevenção camada 1: manifesto de vendor + teste | ✅ PR #5 |
 | 2+ | Cron falhando em silêncio: logs no `scheduled()` | ✅ PR #6 |
-| 0 | **Bloqueador:** acesso a Cloudflare Containers voltar e um deploy de container passar | ⏳ usuário |
-| 3 | Lacunas de documentação | ⬜ |
+| 0 | **Bloqueador:** acesso a Cloudflare Containers voltar e um deploy de container passar | 🟡 acesso ok + deploy de geração ok (13/11 23:42 UTC) · ⏳ deploy de fonética · ⏳ cron de 14/11 gravar |
+| 3 | Lacunas de documentação | ✅ branch `docs/fase-3-lacunas` (aguarda aprovação) |
 | 4a | Watchdog de jobs presos em `running` | ⬜ |
 | 4b | Filtro editorial mínimo no RSS de notícias | ⬜ |
 | 4c | Geração sob demanda ponta a ponta | ⬜ (depende do bloqueador) |
@@ -73,9 +73,10 @@ Ordem sugerida: o bloqueador corre em paralelo (é do usuário). Depois vêm a F
 
 ## Fase 0 — bloqueador (do usuário)
 
-- [ ] Cloudflare → Billing: confirmar o Workers Paid ativo.
-- [ ] Cloudflare → Workers & Pages → Containers: a página abre sem aviso; `npx wrangler containers list` (em `services/generation-container/`) deixa de responder `Account is not authorized`.
-- [ ] Rodar de novo o `deploy-generation-service.yml` (`gh workflow run deploy-generation-service.yml`) e o de fonética, e confirmar sucesso.
+- [x] Cloudflare → Billing: confirmar o Workers Paid ativo.
+- [x] `npx wrangler containers list` responde (verificado 14/11 00:00 UTC): os dois containers `ready`; o de geração com `LAST MODIFIED` 13/11 23:45, o de fonética ainda em 09/08.
+- [x] `deploy-generation-service.yml` passou no push do merge do PR #6 (13/11 23:42 UTC).
+- [ ] Fonética: o último run (13/11 23:18 UTC) falhou **antes** do acesso voltar. Rodar de novo: `gh workflow run deploy-phonetic-service.yml`.
 - [ ] No dia seguinte, confirmar no D1 remoto que o cron gravou:
   ```bash
   cd app && npx wrangler d1 execute deutsch-db --remote --command \
@@ -89,6 +90,8 @@ Ordem sugerida: o bloqueador corre em paralelo (é do usuário). Depois vêm a F
 2. `docs/known-issues.md`, "Lacunas de verificação": a linha "`npm test` (vitest) sai com código 1" está desatualizada pelo mesmo motivo. Revisar as outras linhas da seção.
 3. `docs/known-issues.md`, **estrutura quebrada**: as seções "Container de geração quebraria no boot" e "Cron diário parado desde 10/10/2026" foram inseridas no meio da lista "Resolvidos (02/11/2026)". Hoje os itens 2–4 aparecem debaixo do título do cron. Devolver os itens 2–4 para baixo do item 1 e mover as duas seções para depois da lista. Não mudar o conteúdo.
 4. Conferir se `pipeline/CLAUDE.md` ("Não há testes") e o `verify.yml` ("vulture não foi verificado") ainda batem com a realidade. O commit `30359fa` mexeu no vulture.
+
+Feito em 14/11/2026: as quatro notas foram corrigidas (`npm test` sai com 0; vulture está na `.venv` e passa; `pipeline/CLAUDE.md` passa a citar os testes e as dependências que ainda faltam no `pyproject.toml`, que são `pydantic`, `piper` e `soundfile`). Achado fora do escopo, ainda **não corrigido**: a 1ª linha do `vulture_whitelist.py` é `cat << 'EOF' > vulture_whitelist.py`, sobra de um heredoc de shell. É Python sintaticamente válido (deslocamento e comparação), por isso o vulture não reclama, mas é lixo.
 
 ## Fase 4 — pendências estruturais (uma sub-tarefa por vez)
 
