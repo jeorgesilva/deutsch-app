@@ -23,6 +23,10 @@ Consulta ao D1 remoto em 13/11/2026: o último `reading_blocks` é de 09/10 04:1
 
 Por que ficou um mês sem sinal: `scheduled()` descartava o resultado de `runDailyBatch` (erros por item ficavam no array, nunca no log) e o `/health` do Worker responde `ok` sem tocar no container. Fix: `scheduled()` agora loga o resumo do batch e a falha antes do loop, e o Worker loga quando `CLOUDFLARE_API_TOKEN` está ausente (o container receberia `D1_HTTP_API_TOKEN=""`, que `write_exercises.py` trata como "fora do container" e cai no `npx wrangler`, inexistente na imagem). **Pendente:** acesso a Containers voltar, deploy passar e o cron seguinte gravar no D1.
 
+## Heartbeat do cron diário (14/11/2026)
+
+Ping de heartbeat adicionado no `scheduled()`: GET em `HEALTHCHECKS_PING_URL` quando o batch dá certo, `HEALTHCHECKS_PING_URL/fail` quando o batch rejeita, quando algum item dá erro ou quando nada novo entra. Requer `HEALTHCHECKS_PING_URL` configurada como secret no Worker `deutsch-generation-service` (`wrangler secret put HEALTHCHECKS_PING_URL` em `services/generation-container/`), não no container. **Pendente:** o usuário criar a conta em healthchecks.io e colar a URL. Sem o secret, o Worker loga um aviso e o job segue normalmente.
+
 ## Lacunas de verificação (não são bugs, mas mascaram bugs)
 
 - Não há teste TS: `npm test` (vitest `--passWithNoTests`) sai com 0 sem testar nada do Worker nem do frontend.
