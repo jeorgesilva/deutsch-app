@@ -12,7 +12,8 @@
 // que essa combinacao quebrou. LanguageTool roda via subprocess Java 100%
 // LOCAL ao container (nunca sai pela rede), so' o LLM usa a rede.
 import { Container } from "@cloudflare/containers";
-import type { DurableObject } from "cloudflare:workers";
+import { WorkflowEntrypoint } from "cloudflare:workers";
+import type { DurableObject, WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 
 export class GenerationContainer extends Container<Env> {
   defaultPort = 8080;
@@ -59,6 +60,7 @@ interface Env {
   HUGGINGFACE_API_KEY?: string;
   CLOUDFLARE_API_TOKEN?: string;
   HEALTHCHECKS_PING_URL?: string;
+  DAILY_BATCH: Workflow;
 }
 
 // ACHADO REAL (nao flakiness de plataforma beta -- confirmado lendo
@@ -135,32 +137,75 @@ async function callContainerJson(
 // (evita depender de quão longo um único fetch/scheduled pode durar) e dá
 // isolamento de falha por item sem esforço extra (item 7 falhando não
 // derruba 1-6, mesmo espírito do checkpoint por tópico de generate_batch.py).
-async function runDailyBatch(env: Env): Promise<{ video: any[]; reading: any[] }> {
-  const container = await getReadyContainer(env);
-  const video: any[] = [];
-  const reading: any[] = [];
+//
+// 14/11/2026 -- virou Workflow. Rodando dentro do scheduled(), o batch era
+// cancelado aos 15 min (teto de Cron Trigger) e o resumo + heartbeat nunca
+// rodavam; erro por item ficava so' no array e sumia junto. Agora cada item e'
+// um step duravel (resultado persistido; se a instancia cair, retoma do
+// ultimo step concluido), todo erro e' logado na hora e o heartbeat e' o
+// ultimo step.
+//
+// So' leitura (decisao do usuario, 14/11/2026): video saiu do batch na nuvem.
+// O YouTube devolve 429 no download de legenda pro IP de datacenter do
+// container; ingestao de video passou a ser script local, do IP residencial.
+// /generate-video-item continua no container, so' nao e' mais chamado daqui.
 
-  for (let i = 0; i < DAILY_TARGET_PER_TYPE; i++) {
-    try {
-      const result = await callContainerJson(container, "/generate-video-item", { model: DEFAULT_MODEL });
-      video.push(result);
-      if (result.skipped) break; // playlist esgotada dentro da janela de duração -- parar de tentar
-    } catch (err) {
-      video.push({ error: (err as Error).message });
-    }
-  }
+// Resultado de step precisa ser serializavel e fica persistido pelo Workflow:
+// guarda so' o que o resumo usa, nao o JSON inteiro do container.
+type ItemResult = { skipped?: boolean; error?: string; reason?: string; id?: number };
 
-  for (let i = 0; i < DAILY_TARGET_PER_TYPE; i++) {
-    try {
-      const result = await callContainerJson(container, "/generate-reading-item", { model: DEFAULT_MODEL });
+function summarizeItem(raw: any): ItemResult {
+  if (raw?.skipped) return { skipped: true, reason: String(raw.reason ?? "") };
+  return { id: raw?.reading_block_id };
+}
+
+export class DailyBatchWorkflow extends WorkflowEntrypoint<Env> {
+  async run(_event: Readonly<WorkflowEvent<unknown>>, step: WorkflowStep) {
+    const reading: ItemResult[] = [];
+
+    for (let i = 1; i <= DAILY_TARGET_PER_TYPE; i++) {
+      const name = `reading-${i}`;
+      let result: ItemResult;
+      // step.do lanca depois de esgotar os retries; o catch fica FORA dele
+      // pra uma falha de item virar {error} logado na hora em vez de derrubar
+      // o Workflow antes do heartbeat. 1 retry: falha transitoria de LLM/rede
+      // costuma passar.
+      try {
+        result = await step.do(
+          name,
+          { retries: { limit: 1, delay: "30 seconds", backoff: "constant" }, timeout: "10 minutes" },
+          async () =>
+            summarizeItem(
+              await callContainerJson(await getReadyContainer(this.env), "/generate-reading-item", { model: DEFAULT_MODEL })
+            )
+        );
+      } catch (err) {
+        const message = (err as Error).message;
+        console.error(`daily batch item falhou: ${name}`, message);
+        result = { error: message };
+      }
       reading.push(result);
-      if (result.skipped) break; // feed da DW sem artigo novo -- parar de tentar
-    } catch (err) {
-      reading.push({ error: (err as Error).message });
+      if (result.skipped) break; // feed da DW sem artigo novo
     }
-  }
 
-  return { video, reading };
+    // Conta como falha pro healthchecks (decisao do usuario, 14/11/2026): o
+    // batch rejeitar, QUALQUER erro por item, ou nada novo entrar (inclusive
+    // quando o feed so' devolve skipped). Sucesso parcial com erro manda
+    // /fail de proposito -- degradacao nao fica escondida.
+    const errors = reading.filter((r) => r.error);
+    const summary = {
+      reading_ok: reading.filter((r) => !r.error && !r.skipped).length,
+      errors: errors.map((r) => r.error),
+    };
+    const ok = errors.length === 0 && summary.reading_ok > 0;
+    await step.do("heartbeat", { retries: { limit: 0, delay: "1 second" } }, async () => {
+      if (errors.length) console.error("daily batch com erros", JSON.stringify(summary));
+      else if (!ok) console.error("daily batch sem item novo", JSON.stringify(summary));
+      else console.log("daily batch ok", JSON.stringify(summary));
+      await pingHealthcheck(this.env, ok);
+    });
+    return summary;
+  }
 }
 
 // Fase 6.1 -- dead man's switch (healthchecks.io). O check alerta tanto no
@@ -191,17 +236,21 @@ export default {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
 
-    // Gatilho manual -- mesma função que o cron (scheduled(), abaixo) chama
-    // sozinho às 6h. Existe pra testar o batch ponta a ponta sob demanda
-    // (curl) sem esperar o cron disparar, e pra rodar o primeiro lote do dia
-    // em que isso foi ligado.
+    // Gatilho manual -- cria uma instancia do mesmo DailyBatchWorkflow que o
+    // `schedules` do wrangler.toml dispara as 04:00 UTC. Responde na hora com
+    // o id (o batch leva dezenas de minutos); o andamento fica no painel de
+    // Workflows ou em GET /daily-batch-status?id=. Tambem faz o ping de
+    // heartbeat no fim -- disparar a mao num dia em que o cron falhou conta
+    // como "rodou".
     if (url.pathname === "/run-daily-batch") {
-      try {
-        const result = await runDailyBatch(env);
-        return Response.json(result);
-      } catch (err) {
-        return Response.json({ error: `daily batch error: ${(err as Error).message}` }, { status: 502 });
-      }
+      const instance = await env.DAILY_BATCH.create();
+      return Response.json({ instance_id: instance.id });
+    }
+    if (url.pathname === "/daily-batch-status") {
+      const id = url.searchParams.get("id");
+      if (!id) return Response.json({ error: "id obrigatorio" }, { status: 400 });
+      const instance = await env.DAILY_BATCH.get(id);
+      return Response.json(await instance.status());
     }
 
     try {
@@ -218,44 +267,5 @@ export default {
         { status: 502 }
       );
     }
-  },
-
-  // 06:00 CEST = 04:00 UTC (ver [triggers] em wrangler.toml) -- 10 vídeos +
-  // 10 notícias novos por dia, sem confirmação/curadoria humana (decisão do
-  // usuário, ver video/daily_batch.py e generation/reading_sources.py pro
-  // raciocínio de cada fonte). waitUntil segura o Worker vivo além do fim
-  // síncrono do evento -- necessário porque o batch inteiro (até 20 chamadas
-  // sequenciais, cada uma com I/O de LLM/yt-dlp) passa fácil de 1 minuto.
-  //
-  // O resultado e' logado de proposito: sem isso, erro por item (que
-  // runDailyBatch guarda no array em vez de lancar) e falha ao subir o
-  // container nunca apareciam no log do Worker -- o cron ficou parado desde
-  // 10/10/2026 (conta com pagamento em atraso) sem nenhum sinal.
-  //
-  // Conta como falha pro healthchecks (decisao do usuario, 14/11/2026): o
-  // batch rejeitar, QUALQUER erro por item, ou nada novo entrar (inclusive
-  // quando as duas fontes so' devolvem skipped). Sucesso parcial com erro
-  // manda /fail de proposito -- degradacao nao fica escondida.
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(
-      runDailyBatch(env).then(
-        async (result) => {
-          const errors = [...result.video, ...result.reading].filter((r) => r?.error);
-          const summary = {
-            video_ok: result.video.filter((r) => !r?.error && !r?.skipped).length,
-            reading_ok: result.reading.filter((r) => !r?.error && !r?.skipped).length,
-            errors: errors.map((r) => r.error),
-          };
-          if (errors.length) console.error("daily batch com erros", JSON.stringify(summary));
-          else if (summary.video_ok + summary.reading_ok === 0) console.error("daily batch sem item novo", JSON.stringify(summary));
-          else console.log("daily batch ok", JSON.stringify(summary));
-          await pingHealthcheck(env, errors.length === 0 && summary.video_ok + summary.reading_ok > 0);
-        },
-        async (err) => {
-          console.error("daily batch falhou antes do loop", (err as Error).message, (err as Error).stack);
-          await pingHealthcheck(env, false);
-        }
-      )
-    );
   },
 };

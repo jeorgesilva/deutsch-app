@@ -63,6 +63,7 @@ docs/           planejamento, decisões, mockups/
 - Home por categoria; "Revisão de hoje" (FSRS) é opção, não único fluxo.
 - Tópicos de regência fixa de Dativo e `Funktionsverbgefüge` exigem revisão humana.
 - Geração diária de vídeo/leitura sem curadoria por item, e sem filtro de tema no RSS: todos os temas têm o mesmo valor linguístico (14/11/2026).
+- Vídeo **não** roda na nuvem (14/11/2026). O YouTube devolve 429 no download de legenda (`timedtext`) para o IP de datacenter do container; a listagem da playlist funciona. A causa vem de relatos de terceiros, não de teste nosso: neles, espera, backoff, cookies e pré-lançamento do `yt-dlp` não resolveram, e a Data API está vetada (ver abaixo). Ingestão de vídeo é um script local, rodado à mão do IP residencial, em lote, gravando com `wrangler --remote`. O batch diário na nuvem é só leitura (`DailyBatchWorkflow`). Detalhes em `docs/19-plano-follow-up-fases.md`.
 - Léxico: semear das frases curadas, sem lista de frequência básica. Vetores só quando virar feature real.
 
 ## O que NÃO fazer
