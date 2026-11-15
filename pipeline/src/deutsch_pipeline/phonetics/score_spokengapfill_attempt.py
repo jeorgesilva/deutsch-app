@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 
 from .recognize import phone_diff, recognize_wav2vec
-from .stt import transcribe
+from .stt import lexical_match, transcribe
 from .target_ipa import target_ipa
 from ..ingest.write_exercises import execute_d1, query_d1, sql_value
 
@@ -35,8 +35,7 @@ def score_spokengapfill_attempt(exercise_id: int, audio_path: Path) -> dict:
     # 1. checagem LEXICAL -- STT + accepted_answers (igual ao item 9, so que
     # a resposta do usuario vem de audio transcrito em vez de campo de texto)
     transcribed = transcribe(audio_path)
-    transcribed_lower = transcribed.lower()
-    lexical_correct = any(alt.lower() in transcribed_lower for alt in accepted_answers)
+    lexical_correct = lexical_match(transcribed, accepted_answers)
 
     # 2. checagem de PRONUNCIA -- roda sobre a frase completa (com a lacuna
     # reconstruida), nao so a palavra da lacuna isolada -- avalia a leitura

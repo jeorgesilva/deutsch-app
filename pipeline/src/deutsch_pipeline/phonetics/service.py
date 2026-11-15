@@ -25,7 +25,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request
 
 from .recognize import phone_diff, recognize_wav2vec
-from .stt import transcribe
+from .stt import lexical_match, transcribe
 from .target_ipa import target_ipa
 from ..tts.synthesize import synthesize_to_file
 
@@ -85,8 +85,7 @@ def score_spokengapfill():
     # bloco 1: lexical (STT + accepted_answers) -- separado do bloco 2
     # (pronuncia) por design, nunca um score so (CLAUDE.md).
     transcribed = transcribe(wav_path)
-    transcribed_lower = transcribed.lower()
-    lexical_correct = any(alt.lower() in transcribed_lower for alt in accepted_answers)
+    lexical_correct = lexical_match(transcribed, accepted_answers)
 
     # bloco 2: pronuncia da frase inteira (com a lacuna ja reconstruida)
     tgt = target_ipa(sentence_full)
