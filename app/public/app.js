@@ -2455,6 +2455,13 @@ function renderPhonetic(ex) {
     <div class="card">
       <span class="template-label">${templateLabel(ex.template)}</span>
       <p class="prompt">${escapeHtml(ex.prompt)}</p>
+      ${
+        // a pronuncia e' avaliada na frase completa (service.py) -- falar so'
+        // a palavra da lacuna derruba a similaridade e confunde o STT.
+        ex.template === "SpokenGapFillEngine"
+          ? `<p class="prompt-hint">Fale a frase inteira, com a lacuna preenchida.</p>`
+          : ""
+      }
       <div class="recorder">
         <button class="primary" id="record-btn" type="button">● Gravar</button>
         <audio id="preview" controls style="display:none"></audio>
@@ -2582,12 +2589,25 @@ function blobToBase64(blob) {
 }
 
 async function submitPhoneticAttempt(ex, audioBase64) {
-  const res = await fetch("/api/attempts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ exercise_id: ex.id, audio_base64: audioBase64 }),
-  });
-  const result = await res.json();
+  // erro (500/502 do servico fonetico, rede) aparece e libera os botoes pra
+  // tentar de novo -- antes o feedback lia `pronunciation` de uma resposta de
+  // erro, lancava e a tela ficava parada com o botao desabilitado.
+  let result;
+  try {
+    const res = await fetch("/api/attempts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exercise_id: ex.id, audio_base64: audioBase64 }),
+    });
+    result = await res.json();
+    if (!res.ok) throw new Error(result.error || `erro ${res.status}`);
+  } catch (err) {
+    document.getElementById("feedback").innerHTML =
+      `<p class="error">Não deu para corrigir agora (${escapeHtml(err.message)}). Tente enviar de novo.</p>`;
+    document.getElementById("submit-btn").disabled = false;
+    document.getElementById("rerecord-btn").disabled = false;
+    return;
+  }
   showPhoneticFeedback(result);
 }
 

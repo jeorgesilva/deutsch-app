@@ -79,6 +79,17 @@ def test_limit_vale_por_template(script):
     assert [(it["template"], it["source_id"]) for it in plan] == [("ReadAloudEngine", 1), ("SpokenGapFillEngine", 9)]
 
 
+def test_template_filtra_o_destino(script):
+    sources = [dictation(1, "Frase 1.", 1), gapfill(9, "Er ___.", ["x"])]
+    plan, _ = script.select(sources, [], template="ReadAloudEngine")
+    assert [(it["template"], it["source_id"]) for it in plan] == [("ReadAloudEngine", 1)]
+
+
+def test_main_recusa_template_desconhecido(script):
+    with pytest.raises(SystemExit):
+        script.main(["--remote", "--template", "DictationEngine"])
+
+
 def test_chave_r2_ascii_com_id_de_origem(script):
     item = {"template": "ReadAloudEngine", "source_id": 42,
             "sentence_full": "Die Mühle steht am Fluß, schön gelegen und weit weg."}
