@@ -62,6 +62,9 @@ export type SupportedTemplate = (typeof SUPPORTED_TEMPLATES)[number];
 // DictationEngine (e' um clone do audio dele, Fase 10) mas fica de fora do
 // grupo Fonetica -- pertence a "Pratica semanal" por decisao do docs/12,
 // entao o filtro e' pelo nome do template, nao so' "tem phonetic_point_id".
+// ReadAloudEngine fica nos dois grupos (4d(a), docs/19): o piloto tem
+// content_topic_id, os itens escalados a partir do ditado tem
+// phonetic_point_id -- cada grupo so' ve o item pela sua coluna de topico.
 export const GRAMMAR_TEMPLATES = [
   "GapFillGovernanceEngine",
   "FillBlankEngine",
@@ -73,7 +76,7 @@ export const GRAMMAR_TEMPLATES = [
   "SpokenGapFillEngine",
 ] as const;
 
-export const PHONETICS_TEMPLATES = ["DictationEngine"] as const;
+export const PHONETICS_TEMPLATES = ["DictationEngine", "ReadAloudEngine"] as const;
 
 export interface ExerciseRow {
   id: number;

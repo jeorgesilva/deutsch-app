@@ -584,7 +584,7 @@ const GROUP_TEMPLATES = {
     "ReadAloudEngine",
     "SpokenGapFillEngine",
   ],
-  phonetics: ["DictationEngine"],
+  phonetics: ["DictationEngine", "ReadAloudEngine"],
 };
 
 async function renderCategoryGrid(group) {
