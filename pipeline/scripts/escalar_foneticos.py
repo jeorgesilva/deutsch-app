@@ -26,6 +26,7 @@ mudança ali dispara o redeploy dos dois containers.
 Uso, a partir da raiz do repo:
     PYTHONPATH=pipeline/src .venv/bin/python pipeline/scripts/escalar_foneticos.py --remote --dry-run
     PYTHONPATH=pipeline/src .venv/bin/python pipeline/scripts/escalar_foneticos.py --remote --limit 1
+    PYTHONPATH=pipeline/src .venv/bin/python pipeline/scripts/escalar_foneticos.py --remote --template ReadAloudEngine
     PYTHONPATH=pipeline/src .venv/bin/python pipeline/scripts/escalar_foneticos.py --remote
 """
 import argparse
@@ -67,8 +68,9 @@ def topic_needs_review(topico: str | None) -> bool:
 
 
 def select(sources: list[dict], existing: list[dict], needs_review=topic_needs_review,
-           limit: int | None = None) -> tuple[list[dict], Counter]:
-    """Itens a criar (no máximo `limit` por template) e contagem dos pulados por motivo."""
+           limit: int | None = None, template: str | None = None) -> tuple[list[dict], Counter]:
+    """Itens a criar (no máximo `limit` por template; só `template`, se dado) e
+    contagem dos pulados por motivo."""
     plan, skipped = [], Counter()
     seen = {(row["template"], row["prompt"]) for row in existing}
     per_template = Counter()
@@ -96,6 +98,8 @@ def select(sources: list[dict], existing: list[dict], needs_review=topic_needs_r
                 "sentence_full": row["prompt"].replace("___", accepted[0], 1),
                 "content_topic_id": row["content_topic_id"], "phonetic_point_id": None,
             }
+        if template is not None and item["template"] != template:
+            continue
         key = (item["template"], item["prompt"])
         if key in seen:
             skipped["ja_existe_no_destino"] += 1
@@ -164,6 +168,8 @@ def main(argv=None) -> int:
                         help="obrigatório: lê e grava no D1/R2 de produção (wrangler --remote)")
     parser.add_argument("--dry-run", action="store_true", help="só mostra o que seria criado")
     parser.add_argument("--limit", type=int, default=None, help="máximo de itens novos por template")
+    parser.add_argument("--template", choices=sorted(DEST_FOLDER), default=None,
+                        help="só este template de destino (padrão: os dois)")
     args = parser.parse_args(argv)
 
     if not args.remote:
@@ -177,7 +183,7 @@ def main(argv=None) -> int:
 
     from deutsch_pipeline.ingest.write_exercises import execute_d1, query_d1
 
-    plan, skipped = select(query_d1(SOURCES_SQL), query_d1(EXISTING_SQL), limit=args.limit)
+    plan, skipped = select(query_d1(SOURCES_SQL), query_d1(EXISTING_SQL), limit=args.limit, template=args.template)
     print_plan(plan, skipped)
     if args.dry_run or not plan:
         return 0
