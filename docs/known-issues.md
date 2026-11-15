@@ -27,6 +27,12 @@ Por que ficou um mês sem sinal: `scheduled()` descartava o resultado de `runDai
 
 Ping de heartbeat adicionado no `scheduled()`: GET em `HEALTHCHECKS_PING_URL` quando o batch dá certo, `HEALTHCHECKS_PING_URL/fail` quando o batch rejeita, quando algum item dá erro ou quando nada novo entra. Requer `HEALTHCHECKS_PING_URL` configurada como secret no Worker `deutsch-generation-service` (`wrangler secret put HEALTHCHECKS_PING_URL` em `services/generation-container/`), não no container. **Pendente:** o usuário criar a conta em healthchecks.io e colar a URL. Sem o secret, o Worker loga um aviso e o job segue normalmente.
 
+## Áudio de ditado e shadowing apontava para chave inexistente no R2 de produção (achado e corrigido em 14/11/2026)
+
+54 dos 79 `audio_ref` distintos do D1 de produção não existiam no bucket `deutsch-media`, o que afetava 59 itens servíveis de `DictationEngine` e 59 de `ShadowingEngine` (o shadowing reaproveita o áudio do ditado). No app, `/media/...` respondia 404 para eles. Causa: a correção das chaves com acento (`docs/18`, Fase 9) regerou as 54 chaves em ASCII e atualizou `exercises.audio_ref`, mas reenviou os objetos só para o **R2 local**. Em produção, o D1 passou a apontar para `dictation/8_2_auslautverhartung…`, enquanto o objeto continuava em `dictation/8_2_auslautverhärtung…`. Não dá para saber desde quando o 404 acontecia em produção. Fix: cada objeto com acento foi copiado para a chave ASCII que o D1 espera (`wrangler r2 object get` → `put`, tamanho conferido byte a byte); depois disso, os 81 `audio_ref` distintos respondem. Os 54 objetos com acento continuam no bucket, sem nada apontando para eles; apagar é decisão pendente do usuário.
+
+Achado junto: o R2 estava **desabilitado na conta** até 14/11 (`403`, código 10042, "Please enable R2 through the Cloudflare Dashboard", inclusive para listar e ler). O usuário reativou no Dashboard. A causa provável é a mesma do pagamento em atraso que bloqueou Containers, mas não foi verificada. O token da sessão MCP do Cloudflare não lista objetos do R2 (`403`, código 10000); a checagem foi feita chave por chave pelo wrangler.
+
 ## Lacunas de verificação (não são bugs, mas mascaram bugs)
 
 - Não há teste TS: `npm test` (vitest `--passWithNoTests`) sai com 0 sem testar nada do Worker nem do frontend.

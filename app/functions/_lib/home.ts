@@ -13,7 +13,14 @@ export interface HomeOverview {
   video: { available_count: number };
 }
 
-async function countDueByTemplates(db: D1Database, userId: number, templates: readonly string[]): Promise<number> {
+// topicIdCol: mesmo criterio de categories.ts -- ReadAloudEngine esta nos
+// dois grupos e so' conta onde o item tem a coluna de topico preenchida.
+async function countDueByTemplates(
+  db: D1Database,
+  userId: number,
+  templates: readonly string[],
+  topicIdCol: "content_topic_id" | "phonetic_point_id"
+): Promise<number> {
   const placeholders = templates.map(() => "?").join(",");
   const row = await db
     .prepare(
@@ -21,7 +28,7 @@ async function countDueByTemplates(db: D1Database, userId: number, templates: re
        FROM servable_exercises e
        JOIN exercise_templates et ON e.exercise_template_id = et.id
        JOIN progress p ON p.exercise_id = e.id AND p.user_id = ?
-       WHERE et.nome IN (${placeholders}) AND p.next_review_at <= ?`
+       WHERE et.nome IN (${placeholders}) AND e.${topicIdCol} IS NOT NULL AND p.next_review_at <= ?`
     )
     .bind(userId, ...templates, new Date().toISOString())
     .first<{ n: number }>();
@@ -40,8 +47,8 @@ export async function getHomeOverview(db: D1Database, userId: number): Promise<H
     .bind(userId, now)
     .first<{ n: number }>();
 
-  const grammarDue = await countDueByTemplates(db, userId, GRAMMAR_TEMPLATES);
-  const phoneticsDue = await countDueByTemplates(db, userId, PHONETICS_TEMPLATES);
+  const grammarDue = await countDueByTemplates(db, userId, GRAMMAR_TEMPLATES, "content_topic_id");
+  const phoneticsDue = await countDueByTemplates(db, userId, PHONETICS_TEMPLATES, "phonetic_point_id");
 
   // status por bloco: 0 tentados -> novo; entre 0 e o total -> em andamento;
   // todos -> concluido. Calculado em TS (poucos blocos, nao vale a

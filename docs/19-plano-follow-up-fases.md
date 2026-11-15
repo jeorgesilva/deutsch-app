@@ -26,8 +26,8 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 
 ## Estado do repo (14/11/2026)
 
-- `origin/main` em `ba19b7d` (merge do PR #21, 14/11/2026 à tarde).
-- PRs #17–#21 (14/11): #17 batch diário vira `DailyBatchWorkflow` + docs da 4d; #18 script local de vídeo; #19–#20 revisão semanal (6.7); #21 board do GitHub Project #2.
+- `origin/main` em `b286f74` (merge do PR #23, 15/11/2026).
+- PRs #17–#23 (14–15/11): #17 batch diário vira `DailyBatchWorkflow` + docs da 4d; #18 script local de vídeo; #19–#20 revisão semanal (6.7); #21 board do GitHub Project #2; #22 estado depois do deploy do Workflow; #23 4c decidida e achados da revisão conferidos. #24: 4d(a).
 - PR #5 (`424b12f`): fix do `schema_class` no container, `schemas.py` no vendor, `vendor-files.txt` + `pipeline/tests/test_vendor_manifest.py`.
 - PR #6 (`554601b`): `scheduled()` passa a logar o resumo do batch diário e as falhas; aviso quando `CLOUDFLARE_API_TOKEN` está ausente. Feito em outra sessão.
 - PR #7: este plano.
@@ -64,6 +64,9 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 
   Os dois foram completados à mão com os CLIs por etapa (`generate_video_exercises --engine citar` e `generate_video_comprehension --engine …`), sem duplicar nada. O script ganhou as duas correções no PR #18: o `PATH` passa a começar pela pasta do Python em uso, e o script recusa rodar sem a chave, antes de qualquer escrita.
   - `chat()` com modelo `hf:` lê **exatamente** `hugging_face_api_key`; `HF_TOKEN` não basta. No `.env` local, a chave é a do token HF `corretor_c1_Alemao`, que tem permissão de Inference Providers. O container usa outro token, o `deutsch_app_c1`, pelo secret `HUGGINGFACE_API_KEY`.
+- **R2 desabilitado na conta até 14/11** (`403`, código 10042, inclusive para ler); o usuário reativou no Dashboard. Com ele de volta, apareceu que 54 áudios de ditado (59 itens de ditado e 59 de shadowing servíveis) apontavam para chave inexistente no R2 de produção: a correção ASCII da Fase 9 só tinha reenviado os objetos para o R2 local. Corrigido em 14/11 copiando cada objeto para a chave ASCII; os 81 `audio_ref` distintos respondem. Detalhes em `docs/known-issues.md`.
+- O batch diário (leitura) **não** usa R2. Só os geradores de ditado e de fonética chamam `tts/upload_r2.py`.
+- A voz do Piper (`de_DE-thorsten-high`) fica em `pipeline/models/tts/` (gitignored) e não estava na máquina até 14/11; o usuário baixou.
 
 ## Tabela de estado
 
@@ -78,7 +81,9 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 4a | Watchdog de jobs presos em `running` | ✅ PR #14 · timeout 90 s **depende da arquitetura**: revisar na 4c |
 | 4b | Filtro editorial mínimo no RSS de notícias | ✅ decidido **sem filtro** (usuário, 14/11): todos os temas ficam; ver `docs/18` |
 | 4c | Geração sob demanda ponta a ponta | ⬜ arquitetura decidida (15/11): Workflow no Worker `deutsch-generation-service`, chamado pela Pages Function por service binding · ⏳ implementação |
-| 4d | Templates que nunca escalaram além do piloto | 🟡 levantamento feito (entrou no PR #17, seção 4d abaixo) · ⏳ decisão do usuário por grupo |
+| 4d | Templates que nunca escalaram além do piloto | 🟡 levantamento feito (entrou no PR #17, seção 4d abaixo) · (a) decidido "escalar" · ⏳ (b) e (c) |
+| 4d(a) | Escalar ReadAloud e SpokenGapFill (`pipeline/scripts/escalar_foneticos.py`) | 🟡 fumaça gravada em 14/11 (ids 12871 e 12872) · ReadAloud entra também na Fonética (`PHONETICS_TEMPLATES`) · ⏳ deploy do Pages, tentativa do usuário no app e depois o lote dos 151 restantes |
+| R2 | Áudio de ditado/shadowing com chave inexistente no R2 de produção | ✅ corrigido em 14/11 (54 cópias para a chave ASCII) · ⏳ decidir se apaga os 54 objetos com acento |
 | 5a | Métricas no model card do corretor | ⬜ (só depois de 1–4) |
 | 5b | Demo sem fricção do corretor | ⬜ |
 | 5c | Corretor como feature do deutsch-app | ⬜ |
@@ -154,6 +159,13 @@ Feito em 14/11/2026: as quatro notas foram corrigidas (`npm test` sai com 0; vul
     - **(c) Na spec (`docs/05`, Grupo B, "em escopo v1 = Sim") e nunca construídos, sem código e sem decisão registrada:** `GuidedImitationEngine` ("Make a similar"), `OpenPromptEngine` (4 exercícios: Completing, 5 opiniões, Consequências em cadeia…) e `PersonalReferenceEngine` (Notebook, How do you say it?, List). `TutorSessionEngine` ficou sem engine de propósito (correção humana, `types.ts`); `SpacedReviewEngine` é a própria sessão FSRS; `VideoStimulusEngine` é o estímulo, não uma tarefa.
     - **(d) Não é problema:** os 5 `exercises` em `pending` que a auditoria apontou são os de `OpinionEssay` (2), `QuickOpinionSpeech` (2) e `RecordedOpinion` (1). Essas linhas são criadas por plano do usuário e não passam por `servable_exercises` por design (`opinionEssay.ts`).
     - **Uso real:** ~100 tentativas no total, no máximo 20 por template; **última tentativa em 04/09/2026**. São ~14 mil itens servíveis para ~100 tentativas.
+  - **(a) Decisão do usuário (14/11/2026): escalar.** Correção do levantamento: os 26 `phonetic_points` **não têm frases** (o `exemplo` traz palavras soltas e pares mínimos), e os `create_*_exercise.py` recebem uma frase pela CLI. As frases vêm do que o app já serve, sem LLM novo:
+    - ReadAloud ← as 80 frases do `DictationEngine` com `phonetic_point_id` (23 pontos). A mesma frase fica nos dois templates (decisão 1a do usuário).
+    - SpokenGapFill ← os itens do `GapFillGovernanceEngine` (o que a spec do item 115 pede), **fora** de Dativo fixo e `Funktionsverbgefüge` (`model_routing.is_weak_topic`; decisão 2a do usuário, para não espalhar regência sem revisão humana). 8 ficam de fora.
+    - Script `pipeline/scripts/escalar_foneticos.py` (fora de `pipeline/src/`, então não dispara deploy de container): idempotente, `--dry-run`, `--limit N` por template, chave R2 com o id do exercício de origem (a dos `create_*` é só o slug cortado em 40 caracteres e colidiria em lote), grava `phonetic_point_id`. `--dry-run` de 14/11: 79 ReadAloud e 74 SpokenGapFill.
+    - Fumaça (`--limit 1`, 14/11): ids 12871 (SpokenGapFill, origem #6) e 12872 (ReadAloud, origem #809), áudio no R2 conferido. Falta o usuário tentar os dois no app (a fonética nunca corrigiu uma tentativa com a imagem de 14/11) e então rodar o lote.
+    - **Os ReadAloud do lote não apareciam em tela nenhuma:** o template estava só em `GRAMMAR_TEMPLATES`, cujas telas filtram por `content_topic_id`, e os itens vindos do ditado só têm `phonetic_point_id`. Fix (decisão do usuário, 15/11): o ReadAloud fica nos dois grupos (`types.ts` e `GROUP_TEMPLATES` do `app.js`), e a contagem de pendentes da home (`home.ts`) passa a filtrar pela coluna de tópico, para não contar o item duas vezes. Só vale depois do deploy do Pages; o último é do `8f0bda1` (12/08), e desde então `app/` tem 6 commits e nenhuma migration nova.
+    - Ideia anotada, não decidida: usar o corretor (`jeorgesilva/llama3.1-german-corrector-q4`) como triagem dos itens de tópico fraco antes da revisão humana. A revisão rotularia frases reais de regência, que servem de conjunto de teste para a 5a.
 - **Prevenção camadas 2 e 3** (do incidente de 13/11):
   - Camada 2, checagem do `/health` depois do deploy: o `/health` atual não toca no container, então primeiro criar uma rota que exija o container de pé (por exemplo `/health/container`) e só então checá-la no workflow. Pode se juntar à 6.3.
   - Camada 3, aviso de conteúdo velho: **a 6.1 (healthchecks.io) cobre isso por fora**. Um indicador na home ("último item diário em DD/MM", em âmbar) fica opcional.
