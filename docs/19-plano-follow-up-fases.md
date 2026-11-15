@@ -26,8 +26,8 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 
 ## Estado do repo (14/11/2026)
 
-- `origin/main` em `e3ed19e` (merge do PR #22, 14/11/2026 à tarde).
-- PRs #17–#22 (14/11): #17 batch diário vira `DailyBatchWorkflow` + docs da 4d; #18 script local de vídeo; #19–#20 revisão semanal (6.7); #21 board do GitHub Project #2; #22 estado depois do deploy do Workflow.
+- `origin/main` em `b286f74` (merge do PR #23, 15/11/2026).
+- PRs #17–#23 (14–15/11): #17 batch diário vira `DailyBatchWorkflow` + docs da 4d; #18 script local de vídeo; #19–#20 revisão semanal (6.7); #21 board do GitHub Project #2; #22 estado depois do deploy do Workflow; #23 4c decidida e achados da revisão conferidos. #24: 4d(a).
 - PR #5 (`424b12f`): fix do `schema_class` no container, `schemas.py` no vendor, `vendor-files.txt` + `pipeline/tests/test_vendor_manifest.py`.
 - PR #6 (`554601b`): `scheduled()` passa a logar o resumo do batch diário e as falhas; aviso quando `CLOUDFLARE_API_TOKEN` está ausente. Feito em outra sessão.
 - PR #7: este plano.
