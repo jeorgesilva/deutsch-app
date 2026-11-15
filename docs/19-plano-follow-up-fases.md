@@ -77,7 +77,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 3 | Lacunas de documentação | ✅ PR #8 |
 | 4a | Watchdog de jobs presos em `running` | ✅ PR #14 · timeout 90 s **depende da arquitetura**: revisar na 4c |
 | 4b | Filtro editorial mínimo no RSS de notícias | ✅ decidido **sem filtro** (usuário, 14/11): todos os temas ficam; ver `docs/18` |
-| 4c | Geração sob demanda ponta a ponta | ⬜ bloqueador resolvido · `start.ts` ainda em `waitUntil`; mesma decisão de arquitetura do `DailyBatchWorkflow`, mas outro código (Pages Function) |
+| 4c | Geração sob demanda ponta a ponta | ⬜ arquitetura decidida (15/11): Workflow no Worker `deutsch-generation-service`, chamado pela Pages Function por service binding · ⏳ implementação |
 | 4d | Templates que nunca escalaram além do piloto | 🟡 levantamento feito (entrou no PR #17, seção 4d abaixo) · ⏳ decisão do usuário por grupo |
 | 5a | Métricas no model card do corretor | ⬜ (só depois de 1–4) |
 | 5b | Demo sem fricção do corretor | ⬜ |
@@ -96,7 +96,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | Prev. 2 | Prevenção camada 2: `/health/container` checado no deploy | ⬜ |
 | Aud. §3 | `ShadowingEngine` nasce fora das migrations (`docs/17` §3) | ⬜ conferido 14/11: nenhuma migration insere a linha |
 | Aud. §8 | Backlog antigo da auditoria (`docs/17` §8) | ⬜ histórico, não em andamento |
-| Rev. 14/11 | Achados da 1ª revisão semanal (Slack, run 43611649525) | ⬜ do agente, não verificados no código |
+| Rev. 14/11 | Achados da 1ª revisão semanal (Slack, run 43611649525) | 🟡 3 conferidos em 15/11 (ver §4c): watchdog→`done` real e latente; `INSERT` não idempotente real em parte; bloco de leitura duplicado falso (o problema real é bloco com itens faltando). ⏳ 429 por substring e restos de vídeo, não conferidos |
 
 Ordem sugerida: o bloqueador corre em paralelo (é do usuário). Depois vêm a Fase 3, a 6.1–6.4 (fecham a observabilidade que faltou neste incidente), a Fase 4, a 6.5–6.6 e por último a Fase 5. O usuário pode reordenar; a Fase 5 continua presa ao fechamento das Fases 1–4.
 
@@ -142,6 +142,11 @@ Feito em 14/11/2026: as quatro notas foram corrigidas (`npm test` sai com 0; vul
     - Erros vistos: ~8 dos 23 excluídos são de fronteira (sabotagem do Nord Stream, crítica de série sobre o Breitscheidplatz, lembrança do Holocausto), ou seja, o filtro erra para o lado de excluir demais. Furos: `töten`, `Todesfälle`, `sterben`, `Gewalt gegen …`.
 - **4c. Geração sob demanda ponta a ponta.** Nunca rodou em produção (`docs/17-auditoria-projeto.md`). Depende da Fase 0. Documentar o resultado real, inclusive se falhar.
   - Esperado pelo levantamento da 4a: na arquitetura atual (`waitUntil`) o job morre ~30 s depois da resposta e o watchdog o marca `failed` em 90 s. Escolher com o usuário para onde o job vai (Queues, Workflows ou o próprio container gravando no D1) e, **na mesma mudança**, subir `JOB_TIMEOUT_SECONDS` (`topicRegeneration.ts`) e `REGEN_POLL_MAX_MS` (`app.js`) para a duração real de um lote (ordem de 15 min).
+  - **Decisão do usuário (15/11/2026):** o job vai para um **Workflow no Worker `deutsch-generation-service`**, disparado pela Pages Function `start.ts` por service binding, com um step por engine. Mesmo padrão do `DailyBatchWorkflow`. Queues foi descartado: mais uma peça sem ganho claro.
+  - **Conferido no código em 15/11** (achados da revisão semanal de 14/11), e por isso parte do desenho:
+    - O job `failed` pelo watchdog pode voltar a `done`. O `UPDATE ... 'running'` tem a guarda `status = 'pending'`, mas o código não confere se a linha mudou e segue o trabalho. O `UPDATE ... 'done'` e os `INSERT` não têm guarda. Hoje é latente (o `waitUntil` morre antes dos 90 s); com o job durando minutos vira bug. **Requisito:** só avançar se `pending → running` mudar uma linha, e o `done` e os `INSERT` exigirem `status = 'running'`.
+    - `exercises` não tem índice de unicidade e cada exercício é um `INSERT` separado. Uma falha no meio deixa um engine pela metade, e o retry gera de novo todos os engines. Não são cópias idênticas (é geração nova, com `variation_number` 1–5 repetido), mas sobra volume. **Requisito:** gravar cada engine de uma vez com `env.DB.batch()`, e o retry de um step não pode repetir um engine que já gravou.
+    - Fora da 4c: no batch diário, `write_reading_block` grava o bloco antes de gerar os itens, então uma falha deixa um bloco com itens faltando. O retry **não** duplica o bloco, porque `pick_next_unused` exclui as `fonte_url` usadas e pega outro artigo.
 - **4d. Templates/engines que nunca escalaram além do piloto.** Levantar e **propor** se escalam ou são descontinuados, sem decidir sozinho.
   - **Levantamento (14/11/2026, D1 remoto):** a foto da auditoria de 10/08 (`docs/17`, seção 4) mudou. O cron diário fez **escalar** tudo o que deriva de leitura e vídeo: `ParagraphOrderEngine` tem 273 itens servíveis, `PunctuationCapsEngine` 247, e `PredictThenVerify`, `VowelInsert`, `LetterAnagram`, `BinaryChoice`, `TrueFalse`, `ComprehensionQA`, `CompoundSegmentation` e `VideoTask` estão entre 790 e 1.636 cada.
     - **(a) Piloto que nunca escalou:** `ReadAloudEngine` e `SpokenGapFillEngine`, com 1 item cada, a mesma frase de teste ("Der Staat hat die Stadt finanziell unterstützt."). Já há matéria-prima e gerador: 26 `phonetic_points` e os scripts `phonetics/create_readaloud_exercise.py` e `create_spokengapfill_exercise.py`. Uso: 6 e 4 tentativas.
