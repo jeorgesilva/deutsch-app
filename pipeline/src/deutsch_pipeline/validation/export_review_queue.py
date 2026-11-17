@@ -57,6 +57,8 @@ def _flag_detail_summary(raw) -> str:
     if "languagetool_matches" in detail:  # lt_flagged
         msgs = [m.get("message", "") for m in detail["languagetool_matches"]]
         return " | ".join(msgs)
+    if "review_required" in detail:  # human_review_required (harness.apply_review_policy)
+        return detail["review_required"]
     if "removed_alternates" in detail:  # bad_alternate_answer (repair falhou -- caso raro)
         alts = [f"{a.get('alternate')!r} ({a.get('message')})" for a in detail["removed_alternates"]]
         return " | ".join(alts)

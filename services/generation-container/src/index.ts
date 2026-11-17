@@ -61,6 +61,8 @@ interface Env {
   CLOUDFLARE_API_TOKEN?: string;
   HEALTHCHECKS_PING_URL?: string;
   DAILY_BATCH: Workflow;
+  TOPIC_REGENERATION: Workflow<RegenerationParams>;
+  DB: D1Database;
 }
 
 // ACHADO REAL (nao flakiness de plataforma beta -- confirmado lendo
@@ -208,6 +210,184 @@ export class DailyBatchWorkflow extends WorkflowEntrypoint<Env> {
   }
 }
 
+// docs/19, 4c -- geracao sob demanda, antes rodando no waitUntil da Pages
+// Function (cancelado ~30 s depois da resposta; um lote real leva minutos).
+// A Pages Function continua dona do job: cria a linha 'pending' em
+// topic_regeneration_jobs, resolve topico + engines mapeados e dispara uma
+// instancia por job (id "job-<id>", entao o mesmo job nunca roda duas vezes).
+// Daqui pra frente quem escreve no D1 e' este Workflow; o container segue
+// D1-blind em /generate-topic.
+//
+// Requisitos da revisao de 14/11 (docs/19, 4c):
+// - so' trabalha se pending -> running mudar uma linha;
+// - todo INSERT e o 'done' exigem status = 'running' (o watchdog do Pages pode
+//   ter marcado 'failed' no meio, e ai o job para em vez de ressuscitar);
+// - cada engine grava de uma vez (DB.batch e' atomico) e o retry nao repete
+//   engine ja gravado: gerar e gravar sao steps separados, entao o retry do
+//   step de gravacao reusa os MESMOS itens (resultado persistido do step de
+//   geracao) e a checagem pelo prompt do 1o item pega o caso de o batch ter
+//   commitado e o step ter caido antes de registrar o resultado.
+interface RegenerationTopic {
+  id: number;
+  categoria: string;
+  topico: string;
+  nivel: string | null;
+  regra: string;
+  exemplo: string | null;
+  fonte: string | null;
+}
+
+interface RegenerationParams {
+  jobId: number;
+  contentTopicId: number;
+  topic: RegenerationTopic;
+  engines: { id: number; nome: string }[];
+}
+
+// mesmo valor de antes no topicRegeneration.ts: 1 chamada de LLM por engine
+const REGEN_N_PER_TOPIC = 5;
+
+// ja no formato das colunas: resultado de step precisa ser serializavel
+type RegenRow = {
+  variation_number: number | null;
+  prompt: string;
+  accepted_answers: string;
+  source_rule: string | null;
+  generated_by: string | null;
+  validation_status: string;
+  flag_reason: string | null;
+  flag_detail: string | null;
+};
+
+const JOB_IS_RUNNING = `EXISTS (SELECT 1 FROM topic_regeneration_jobs WHERE id = ? AND status = 'running')`;
+
+export class TopicRegenerationWorkflow extends WorkflowEntrypoint<Env, RegenerationParams> {
+  async run(event: Readonly<WorkflowEvent<RegenerationParams>>, step: WorkflowStep) {
+    const { jobId, contentTopicId, topic, engines } = event.payload;
+    const db = this.env.DB;
+
+    const claimed = await step.do("claim", async () => {
+      const res = await db
+        .prepare(`UPDATE topic_regeneration_jobs SET status = 'running' WHERE id = ? AND status = 'pending'`)
+        .bind(jobId)
+        .run();
+      return res.meta.changes === 1;
+    });
+    if (!claimed) {
+      console.warn(`topic regeneration: job ${jobId} nao estava pending, nada feito`);
+      return { skipped: true };
+    }
+
+    const errors: string[] = [];
+    let inserted = 0;
+    let stopped = false;
+
+    for (const engine of engines) {
+      try {
+        const rows = await step.do(
+          `generate-${engine.nome}`,
+          { retries: { limit: 1, delay: "30 seconds", backoff: "constant" }, timeout: "10 minutes" },
+          async (): Promise<RegenRow[]> => {
+            const data = await callContainerJson(await getReadyContainer(this.env), "/generate-topic", {
+              engine: engine.nome,
+              model: DEFAULT_MODEL,
+              topic,
+              n_per_topic: REGEN_N_PER_TOPIC,
+              items_per_call: REGEN_N_PER_TOPIC,
+            });
+            return (data.exercises ?? []).map((ex: any) => ({
+              variation_number: ex.variation_number ?? null,
+              prompt: ex.prompt,
+              accepted_answers: JSON.stringify(ex.accepted_answers ?? []),
+              source_rule: ex.source_rule ?? null,
+              generated_by: ex.generated_by ?? null,
+              validation_status: ex.validation_status,
+              flag_reason: ex.flag_reason ?? null,
+              flag_detail: ex.flag_detail != null ? JSON.stringify(ex.flag_detail) : null,
+            }));
+          }
+        );
+
+        const written = await step.do(
+          `write-${engine.nome}`,
+          { retries: { limit: 2, delay: "10 seconds", backoff: "constant" } },
+          async () => {
+            if (rows.length === 0) return { inserted: 0, stopped: false };
+            const already = await db
+              .prepare(`SELECT 1 FROM exercises WHERE content_topic_id = ? AND exercise_template_id = ? AND prompt = ? LIMIT 1`)
+              .bind(contentTopicId, engine.id, rows[0].prompt)
+              .first();
+            if (already) return { inserted: rows.length, stopped: false };
+
+            const results = await db.batch(
+              rows.map((r) =>
+                db
+                  .prepare(
+                    `INSERT INTO exercises (exercise_template_id, content_topic_id, variation_number, prompt,
+                                             accepted_answers, source_rule, generated_by, validation_status,
+                                             flag_reason, flag_detail)
+                     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${JOB_IS_RUNNING}`
+                  )
+                  .bind(
+                    engine.id,
+                    contentTopicId,
+                    r.variation_number,
+                    r.prompt,
+                    r.accepted_answers,
+                    r.source_rule,
+                    r.generated_by,
+                    r.validation_status,
+                    r.flag_reason,
+                    r.flag_detail,
+                    jobId
+                  )
+              )
+            );
+            const n = results.reduce((acc, res) => acc + (res.meta.changes ?? 0), 0);
+            // 0 linhas com itens pra gravar = o job saiu de 'running' (watchdog)
+            return { inserted: n, stopped: n === 0 };
+          }
+        );
+        inserted += written.inserted;
+        if (written.stopped) {
+          stopped = true;
+          break;
+        }
+      } catch (err) {
+        // mesmo criterio do batch diario: um engine falhando nao derruba os
+        // outros; o job termina 'failed' com os erros no fim
+        const message = `${engine.nome}: ${(err as Error).message}`;
+        console.error("topic regeneration: engine falhou", jobId, message);
+        errors.push(message);
+      }
+    }
+
+    if (stopped) {
+      console.warn(`topic regeneration: job ${jobId} saiu de running no meio, parado`);
+      return { inserted, stopped: true };
+    }
+
+    await step.do("finish", async () => {
+      const stmt = errors.length
+        ? db
+            .prepare(
+              `UPDATE topic_regeneration_jobs SET status = 'failed', error = ?, completed_at = datetime('now')
+               WHERE id = ? AND status = 'running'`
+            )
+            .bind(errors.join(" | ").slice(0, 500), jobId)
+        : db
+            .prepare(
+              `UPDATE topic_regeneration_jobs SET status = 'done', completed_at = datetime('now')
+               WHERE id = ? AND status = 'running'`
+            )
+            .bind(jobId);
+      await stmt.run();
+    });
+    console.log("topic regeneration terminou", JSON.stringify({ jobId, inserted, errors }));
+    return { inserted, errors };
+  }
+}
+
 // Fase 6.1 -- dead man's switch (healthchecks.io). O check alerta tanto no
 // /fail quanto na AUSENCIA de ping no periodo, entao cobre tambem o caso do
 // cron nem disparar. Falha do proprio ping so' loga: nunca derruba o job.
@@ -251,6 +431,22 @@ export default {
       if (!id) return Response.json({ error: "id obrigatorio" }, { status: 400 });
       const instance = await env.DAILY_BATCH.get(id);
       return Response.json(await instance.status());
+    }
+
+    // docs/19, 4c -- chamado pela Pages Function (start.ts) logo depois de
+    // criar o job 'pending'. O andamento fica no proprio job, que o frontend
+    // ja consulta; id fixo por job faz um segundo disparo falhar no create.
+    if (url.pathname === "/topic-regeneration" && request.method === "POST") {
+      const params = (await request.json()) as RegenerationParams;
+      if (!Number.isInteger(params?.jobId) || !params.topic?.topico || !params.engines?.length) {
+        return Response.json({ error: "jobId, topic e engines sao obrigatorios" }, { status: 400 });
+      }
+      try {
+        const instance = await env.TOPIC_REGENERATION.create({ id: `job-${params.jobId}`, params });
+        return Response.json({ instance_id: instance.id });
+      } catch (err) {
+        return Response.json({ error: `nao criou a instancia: ${(err as Error).message}` }, { status: 409 });
+      }
     }
 
     try {

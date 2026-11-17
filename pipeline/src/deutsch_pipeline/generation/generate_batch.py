@@ -34,7 +34,7 @@ from pathlib import Path
 
 from ..ingest.write_exercises import build_insert, execute_d1, query_d1
 from ..lexicon.link_exercise_lexicon import link_new_exercises
-from ..validation.harness import validate_batch
+from ..validation.harness import apply_review_policy, validate_batch
 from . import prompts as gapfill_prompts
 from . import prompts_fillblank as fillblank_prompts
 from . import prompts_registerreformulation
@@ -215,6 +215,7 @@ def main():
         print(f"  -> {len(exercises)} itens em {time.time() - t0:.1f}s -- validando e gravando...")
 
         validate_batch(exercises)
+        apply_review_policy(exercises, args.engine)
         inserted, skipped = write_to_d1(exercises, topics_cache, templates_cache)
         # validation_status (nao flag_reason) pra contar repaired_alternate junto
         # com auto_ok -- os dois sao "auto_ok" pro D1 (validation/harness.py DB_STATUS).
