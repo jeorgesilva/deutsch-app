@@ -63,7 +63,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
   - na primeira, `yt-dlp` não estava no `PATH`, porque o venv não estava ativado; nada foi gravado;
   - na segunda, faltava `hugging_face_api_key` no `.env`. O pipeline grava o clipe, os segmentos e os exercícios sem LLM (legendar/dictation) **antes** do LLM, então os vídeos 1024 e 1074 ficaram pela metade.
 
-  Os dois foram completados à mão com os CLIs por etapa (`generate_video_exercises --engine citar` e `generate_video_comprehension --engine …`), sem duplicar nada. O script ganhou as duas correções no PR #18: o `PATH` passa a começar pela pasta do Python em uso, e o script recusa rodar sem a chave, antes de qualquer escrita.
+  Os dois foram completados à mão com os CLIs por etapa (`generate_video_exercises --engine citar` e `generate_video_comprehension --engine …`), sem duplicar nada. O script ganhou as duas correções: o `PATH` passa a começar pela pasta do Python em uso, e o script recusa rodar sem a chave, antes de qualquer escrita. **Elas só chegaram a `main` em 17/11:** o commit (`df2ea2d`) foi enviado à branch do PR #18 às 15:37 UTC de 14/11, 15 min depois do merge, e ficou de fora. Achado na limpeza de branches.
   - `chat()` com modelo `hf:` lê **exatamente** `hugging_face_api_key`; `HF_TOKEN` não basta. No `.env` local, a chave é a do token HF `corretor_c1_Alemao`, que tem permissão de Inference Providers. O container usa outro token, o `deutsch_app_c1`, pelo secret `HUGGINGFACE_API_KEY`.
 - **R2 desabilitado na conta até 14/11** (`403`, código 10042, inclusive para ler); o usuário reativou no Dashboard. Com ele de volta, apareceu que 54 áudios de ditado (59 itens de ditado e 59 de shadowing servíveis) apontavam para chave inexistente no R2 de produção: a correção ASCII da Fase 9 só tinha reenviado os objetos para o R2 local. Corrigido em 14/11 copiando cada objeto para a chave ASCII; os 81 `audio_ref` distintos respondem. Detalhes em `docs/known-issues.md`.
 - O batch diário (leitura) **não** usa R2. Só os geradores de ditado e de fonética chamam `tts/upload_r2.py`.
@@ -100,7 +100,7 @@ Regras que valem para todas as fases (do `CLAUDE.md` raiz e do pedido original):
 | 6.7 v1.1 | Prompt via `comprehensive-review-code-reviewer`, com sonnet | ⬜ |
 | 6.8 | Passada de segurança periódica | ⬜ fase futura |
 | 429-a | Incidente do vídeo: batch diário vira `DailyBatchWorkflow` | 🟡 PR #17, deploy ok 14/11 · ⏳ conferir o 1º run agendado (15/11 04:00 UTC) |
-| 429-b | Incidente do vídeo: ingestão de vídeo local | 🟡 PR #18 (com as correções de `PATH` e da chave) · 1ª rodada real em 14/11: legenda ok do IP residencial, 2 vídeos completados à mão (ver "Fatos") · ⏳ uma rodada completa do script, sem intervenção |
+| 429-b | Incidente do vídeo: ingestão de vídeo local | 🟡 PR #18; as correções de `PATH` e da chave ficaram fora do merge e só entraram em `main` em 17/11 (ver "Fatos") · 1ª rodada real em 14/11: legenda ok do IP residencial, 2 vídeos completados à mão (ver "Fatos") · ⏳ uma rodada completa do script, sem intervenção |
 | Prev. 2 | Prevenção camada 2: `/health/container` checado no deploy | ⬜ |
 | Aud. §3 | `ShadowingEngine` nasce fora das migrations (`docs/17` §3) | ⬜ conferido 14/11: nenhuma migration insere a linha |
 | Aud. §8 | Backlog antigo da auditoria (`docs/17` §8) | ⬜ histórico, não em andamento |
