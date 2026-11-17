@@ -7,7 +7,7 @@ name = "deutsch-generation-service"
 compatibility_date = "2026-07-31"
 main = "src/index.ts"
 
-# Batch diario (ate 10 blocos de leitura; video saiu em 14/11/2026 -- 429 do
+# Batch periodico, hoje semanal (ver abaixo) (ate 10 blocos de leitura; video saiu em 14/11/2026 -- 429 do
 # YouTube pro IP do container, ingestao de video virou script local) as
 # 04:00 UTC. Era um
 # [triggers] crons + scheduled(), mas Cron Trigger tem teto de 15 min de wall
@@ -22,11 +22,32 @@ main = "src/index.ts"
 [triggers]
 crons = []
 
+#
+# Semanal, segunda 04:00 UTC, temporariamente (decisao do usuario, 17/11/2026,
+# docs/19): com o uso parado, ~10 blocos por semana bastam. Voltar pra diario
+# e' trocar por "0 4 * * *" (e o periodo do check no healthchecks.io junto).
 [[workflows]]
 name = "deutsch-daily-batch"
 binding = "DAILY_BATCH"
 class_name = "DailyBatchWorkflow"
-schedules = ["0 4 * * *"]
+schedules = ["0 4 * * 1"]
+
+# docs/19, 4c -- geracao sob demanda. A Pages Function cria o job em
+# topic_regeneration_jobs e dispara uma instancia por job (POST
+# /topic-regeneration); um step por engine. Sai do waitUntil, que a
+# Cloudflare cancela ~30 s depois da resposta.
+[[workflows]]
+name = "deutsch-topic-regeneration"
+binding = "TOPIC_REGENERATION"
+class_name = "TopicRegenerationWorkflow"
+
+# So' o TopicRegenerationWorkflow usa: ele grava os exercicios (o container
+# continua D1-blind em /generate-topic). Mesmo banco do app/wrangler.toml.
+# No `wrangler dev` o binding e' LOCAL (Miniflare), nao o D1 de producao.
+[[d1_databases]]
+binding = "DB"
+database_name = "deutsch-db"
+database_id = "38bafa99-fe7f-415f-804b-139bf444b918"
 
 # achado (docs/16): [observability] precisa vir DEPOIS de todo campo de
 # nivel raiz (main, compatibility_date etc.) -- em TOML, uma vez que
