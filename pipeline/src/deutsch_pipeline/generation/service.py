@@ -29,7 +29,7 @@ import traceback
 
 from flask import Flask, jsonify, request
 
-from ..validation.harness import validate_batch
+from ..validation.harness import apply_review_policy, validate_batch
 from . import prompts as gapfill_prompts
 from . import prompts_fillblank as fillblank_prompts
 from . import prompts_registerreformulation
@@ -134,6 +134,7 @@ def generate_topic_endpoint():
         return jsonify({"error": f"falha na geração (provedor {model_used}): {e}"}), 502
 
     validate_batch(exercises)
+    apply_review_policy(exercises, engine)
 
     # itens sem prompt utilizavel (gate estrutural falhou) nunca viram linha
     # em exercises -- mesmo criterio de write_exercises.py::main.

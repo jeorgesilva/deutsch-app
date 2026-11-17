@@ -16,7 +16,8 @@ gap_answer/accepted_answers/prompt/expected_case) e devolve a mesma lista
 com "validation_status" preenchido em duas granularidades:
 
 - ex["flag_reason"]: diagnostico fino -- "auto_ok" | "repaired_alternate" |
-  "structural_mismatch" | "case_mismatch" | "lt_flagged" | "bad_alternate_answer".
+  "structural_mismatch" | "case_mismatch" | "lt_flagged" | "bad_alternate_answer" |
+  "human_review_required" (este so via apply_review_policy, por engine).
   Desde a migration 0004_review_workflow.sql tambem vai pro D1 (coluna
   flag_reason), junto com flag_detail (JSON) -- antes so existia no JSON local,
   o que deixava a fila de revisao humana sem saber POR QUE algo foi flagged.
@@ -38,6 +39,18 @@ DB_STATUS = {
     "case_mismatch": "flagged",
     "lt_flagged": "flagged",
     "bad_alternate_answer": "flagged",
+    "human_review_required": "flagged",
+}
+
+# docs/19, 4d(b): engines cujo erro tipico os gates acima nao enxergam. No
+# RegisterReformulationEngine, 17 de 28 itens do lote de 05/08 passaram como
+# auto_ok e foram rejeitados na revisao humana: sentence_b acrescentava
+# conteudo (consequencia/avaliacao) que nao estava em sentence_a, sem erro
+# gramatical nenhum pro LanguageTool pegar. Ate existir um gate de fidelidade
+# testado contra esses itens, todo item desses engines vai pra fila de revisao.
+REVIEW_REQUIRED_ENGINES = {
+    "RegisterReformulationEngine": "revisão humana obrigatória: conferir se a forma nominal "
+                                   "não acrescenta conteúdo que não está na frase original",
 }
 
 
@@ -151,4 +164,20 @@ def validate_batch(exercises: list[dict], languagetool=None) -> list[dict]:
         if owns_tool:
             languagetool.close()
 
+    return exercises
+
+
+def apply_review_policy(exercises: list[dict], engine_name: str) -> list[dict]:
+    """Roda depois de validate_batch. Pra engine em REVIEW_REQUIRED_ENGINES,
+    item que sairia auto_ok (inclusive repaired_alternate) vira flagged com
+    flag_reason='human_review_required'. Item ja flagged por outro gate fica
+    com o motivo original, que e' mais especifico pro revisor."""
+    motivo = REVIEW_REQUIRED_ENGINES.get(engine_name)
+    if motivo is None:
+        return exercises
+    for ex in exercises:
+        if ex.get("validation_status") == "auto_ok":
+            ex["flag_reason"] = "human_review_required"
+            ex["flag_detail"] = {"review_required": motivo}
+            ex["validation_status"] = DB_STATUS["human_review_required"]
     return exercises
