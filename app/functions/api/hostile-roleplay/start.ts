@@ -8,6 +8,7 @@
 // (item 99) grava engine diferente de HostileRoleplayEngine (95-98) mesmo
 // passando pelo mesmo endpoint/mecanismo.
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
+import { PUBLIC_MESSAGES, upstreamFailure } from "../../_lib/errors";
 import { getGrupoDPersona, startSession } from "../../_lib/roleplay";
 import { Env } from "../../_lib/types";
 
@@ -28,13 +29,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     persona = getGrupoDPersona(body.persona);
   } catch (err) {
-    return Response.json({ error: (err as Error).message }, { status: 400 });
+    // getGrupoDPersona so' lanca PublicError (400); o generico e' por garantia
+    return upstreamFailure("hostile-roleplay/start: persona", err, "persona inválida", 400);
   }
 
   try {
     const { sessionId, openingMessage } = await startSession(env, user.id, persona.engine, persona.key, null);
     return Response.json({ session_id: sessionId, message: openingMessage });
   } catch (err) {
-    return Response.json({ error: `falha ao iniciar sessao: ${(err as Error).message}` }, { status: 502 });
+    return upstreamFailure("hostile-roleplay/start", err, PUBLIC_MESSAGES.llm);
   }
 };

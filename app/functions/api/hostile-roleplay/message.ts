@@ -4,7 +4,7 @@
 // -- nunca corrige/avalia aqui, so' no /close (evita quebrar a imersao no
 // meio da conversa).
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
-import { PublicError, publicErrorResponse } from "../../_lib/errors";
+import { PUBLIC_MESSAGES, upstreamFailure } from "../../_lib/errors";
 import { MAX_CHARS, textTooLong } from "../../_lib/limits";
 import { postMessage } from "../../_lib/roleplay";
 import { Env } from "../../_lib/types";
@@ -31,7 +31,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const reply = await postMessage(env, user.id, body.session_id, body.text);
     return Response.json({ message: reply });
   } catch (err) {
-    if (err instanceof PublicError) return publicErrorResponse(err);
-    return Response.json({ error: (err as Error).message }, { status: 502 });
+    return upstreamFailure("hostile-roleplay/message", err, PUBLIC_MESSAGES.llm);
   }
 };

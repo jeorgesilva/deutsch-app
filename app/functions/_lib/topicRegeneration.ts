@@ -5,6 +5,7 @@
 // pending -> running -> done|failed -- o frontend faz polling, nunca trava
 // esperando síncrono (um lote real pode levar dezenas de segundos a
 // minutos, R1 sozinho levou ~230s pra 4 itens numa sessão anterior).
+import { logServerError } from "./errors";
 import { generateTopicExercises, GenerationTopicInput } from "./generationContainer";
 import { Env } from "./types";
 
@@ -174,6 +175,9 @@ export async function runRegenerationJob(env: Env, jobId: number, contentTopicId
       .bind(jobId)
       .run();
   } catch (err) {
+    // AI-4.6c: detalhe no log e na coluna `error` (so' servidor); o
+    // status.ts devolve mensagem generica ao navegador
+    logServerError(`topic regeneration: job ${jobId} falhou`, err);
     await env.DB.prepare(
       `UPDATE topic_regeneration_jobs SET status = 'failed', error = ?, completed_at = datetime('now') WHERE id = ?`
     )

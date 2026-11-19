@@ -230,16 +230,18 @@ export const GRUPO_D_PERSONAS: PersonaConfig[] = [
   PERSONAS.assigned_position,
 ];
 
+// AI-4.6c: os erros abaixo sao mensagens de produto (PublicError) e chegam
+// ao usuario; o valor recebido (`key`) fica fora do texto.
 function getPersona(key: string): PersonaConfig {
   const persona = PERSONAS[key as PersonaKey];
-  if (!persona) throw new Error(`persona de roleplay desconhecida: "${key}"`);
+  if (!persona) throw new PublicError("persona de roleplay desconhecida", 400);
   return persona;
 }
 
 export function getGrupoDPersona(key: string): PersonaConfig {
   const persona = getPersona(key);
   if (!GRUPO_D_PERSONAS.includes(persona)) {
-    throw new Error(`"${key}" não é uma persona válida do Grupo D`);
+    throw new PublicError("persona inválida para o Grupo D", 400);
   }
   return persona;
 }
@@ -330,8 +332,8 @@ export async function postMessage(env: Env, userId: number, sessionId: number, u
   const session = await env.DB.prepare(`SELECT * FROM roleplay_sessions WHERE id = ? AND user_id = ?`)
     .bind(sessionId, userId)
     .first<RoleplaySessionRow>();
-  if (!session) throw new Error("sessão não encontrada");
-  if (session.status !== "active") throw new Error("sessão já encerrada");
+  if (!session) throw new PublicError("sessão não encontrada", 404);
+  if (session.status !== "active") throw new PublicError("sessão já encerrada", 409);
 
   const persona = getPersona(session.persona);
 
@@ -373,7 +375,7 @@ export async function closeSession(env: Env, userId: number, sessionId: number):
   const session = await env.DB.prepare(`SELECT * FROM roleplay_sessions WHERE id = ? AND user_id = ?`)
     .bind(sessionId, userId)
     .first<RoleplaySessionRow>();
-  if (!session) throw new Error("sessão não encontrada");
+  if (!session) throw new PublicError("sessão não encontrada", 404);
   if (session.status === "closed" && session.evaluation_json) {
     return JSON.parse(session.evaluation_json);
   }

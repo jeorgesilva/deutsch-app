@@ -2,6 +2,7 @@
 // enquanto o job roda em background (docs/14: "sem travar esperando
 // síncrono").
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
+import { PUBLIC_MESSAGES } from "../../_lib/errors";
 import { expireStaleJobs } from "../../_lib/topicRegeneration";
 import { Env } from "../../_lib/types";
 
@@ -35,5 +36,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .first<JobRow>();
 
   if (!job) return Response.json({ error: "job não encontrado" }, { status: 404 });
-  return Response.json({ job });
+  // AI-4.6c: topic_regeneration_jobs.error guarda o erro cru (resposta do
+  // container, stack cortado) -- fica no D1 como registro para depurar,
+  // mas nao vai para o navegador.
+  return Response.json({ job: { ...job, error: job.error ? PUBLIC_MESSAGES.regenerationJob : null } });
 };

@@ -5,6 +5,7 @@
 // saida sempre visivel, nunca precisa passar por aqui pra sair da
 // conversa).
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
+import { PUBLIC_MESSAGES, upstreamFailure } from "../../_lib/errors";
 import { closeSession } from "../../_lib/roleplay";
 import { Env } from "../../_lib/types";
 
@@ -25,6 +26,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const evaluation = await closeSession(env, user.id, body.session_id);
     return Response.json({ evaluation });
   } catch (err) {
-    return Response.json({ error: (err as Error).message }, { status: 502 });
+    return upstreamFailure("hostile-roleplay/close", err, PUBLIC_MESSAGES.llm);
   }
 };

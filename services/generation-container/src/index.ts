@@ -466,10 +466,12 @@ export default {
       // "tratar cota estourada/provedor indisponivel como erro legivel,
       // nunca travamento silencioso" -- vale igual pra falha do proprio
       // container, achado depurando o primeiro deploy real).
-      return Response.json(
-        { error: `container error: ${(err as Error).message}`, stack: (err as Error).stack },
-        { status: 502 }
-      );
+      // AI-4.6c: o stack fica so' no log. Ele chegava cortado ao navegador
+      // via topic_regeneration_jobs.error. A mensagem continua no corpo: o
+      // chamador e' a Pages Function (autenticada pelo Bearer), que a grava
+      // no D1 sem repassar ao navegador.
+      console.error("container error", (err as Error).stack ?? (err as Error).message);
+      return Response.json({ error: `container error: ${(err as Error).message}` }, { status: 502 });
     }
   },
 };

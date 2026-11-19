@@ -4,6 +4,7 @@
 // user_response} pros 18 templates de texto, {exercise_id, audio_base64}
 // pra ReadAloudEngine/SpokenGapFillEngine.
 import { getCurrentUser, unauthorized } from "../_lib/auth";
+import { PUBLIC_MESSAGES, upstreamFailure } from "../_lib/errors";
 import { explainAttempt } from "../_lib/explain";
 import { gradeAttempt } from "../_lib/grading";
 import { audioTooLong, MAX_AUDIO_BASE64_CHARS, MAX_CHARS, textTooLong } from "../_lib/limits";
@@ -142,7 +143,8 @@ async function handleShadowingAttempt(env: Env, userId: number, exerciseId: numb
 async function handlePhoneticAttempt(env: Env, userId: number, exercise: ExerciseRow, audioBase64: string): Promise<Response> {
   const serviceUrl = env.PHONETIC_SERVICE_URL;
   if (!serviceUrl) {
-    return Response.json({ error: "PHONETIC_SERVICE_URL nao configurado" }, { status: 500 });
+    console.error("PHONETIC_SERVICE_URL ausente (attempts)");
+    return Response.json({ error: PUBLIC_MESSAGES.phoneticNotConfigured }, { status: 500 });
   }
 
   let userResponse: string | null = null;
@@ -165,10 +167,7 @@ async function handlePhoneticAttempt(env: Env, userId: number, exercise: Exercis
       pronunciation = score.pronunciation;
     }
   } catch (err) {
-    return Response.json(
-      { error: `servico fonetico indisponivel (${(err as Error).message})` },
-      { status: 502 }
-    );
+    return upstreamFailure("attempts: servico fonetico", err, PUBLIC_MESSAGES.phonetic);
   }
 
   const attemptResult = await env.DB.prepare(

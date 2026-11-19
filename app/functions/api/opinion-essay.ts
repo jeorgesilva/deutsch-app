@@ -5,6 +5,7 @@
 // correction_json ja usado no schema (attempts), so que este e' o primeiro
 // engine a de fato preencher correction_json.
 import { getCurrentUser, unauthorized } from "../_lib/auth";
+import { PUBLIC_MESSAGES, upstreamFailure } from "../_lib/errors";
 import { MAX_CHARS, textTooLong } from "../_lib/limits";
 import { gradeOpinionEssay } from "../_lib/llm";
 import { ensureEssayExercise, getActiveEssayPlan, latestEssayAttempt, parseTargetVocabulary, WORD_TARGET } from "../_lib/opinionEssay";
@@ -59,7 +60,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     rubric = await gradeOpinionEssay(env, plan.theme_text!, targetVocabulary, body.text);
   } catch (err) {
-    return Response.json({ error: `correcao via LLM falhou: ${(err as Error).message}` }, { status: 502 });
+    return upstreamFailure("opinion-essay: corrigir", err, PUBLIC_MESSAGES.llm);
   }
 
   await env.DB.prepare(

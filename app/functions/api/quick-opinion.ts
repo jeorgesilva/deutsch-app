@@ -5,6 +5,7 @@
 // do OpinionEssayEngine, não há "ensure/reaproveita" -- cada tentativa é
 // um tópico novo, não existe "o mesmo tema da semana" pra reaproveitar.
 import { getCurrentUser, unauthorized } from "../_lib/auth";
+import { PUBLIC_MESSAGES, upstreamFailure } from "../_lib/errors";
 import { MAX_CHARS, textTooLong } from "../_lib/limits";
 import { generateQuickOpinionTopic, gradeQuickOpinion } from "../_lib/quickOpinion";
 import { Env } from "../_lib/types";
@@ -19,7 +20,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const topic = await generateQuickOpinionTopic(env);
     return Response.json({ topic });
   } catch (err) {
-    return Response.json({ error: `falha ao gerar tópico: ${(err as Error).message}` }, { status: 502 });
+    return upstreamFailure("quick-opinion: gerar tópico", err, PUBLIC_MESSAGES.llm);
   }
 };
 
@@ -47,7 +48,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     rubric = await gradeQuickOpinion(env, body.topic, body.text);
   } catch (err) {
-    return Response.json({ error: `correção via LLM falhou: ${(err as Error).message}` }, { status: 502 });
+    return upstreamFailure("quick-opinion: corrigir", err, PUBLIC_MESSAGES.llm);
   }
 
   const exerciseResult = await env.DB.prepare(
