@@ -1,0 +1,25 @@
+# AI-4.6e (Tech DD, 18/11/2026) -- as Actions dos workflows estao fixadas por
+# SHA, com a versao no comentario ao lado (`@<sha> # v4.4.0`). Alerta de
+# seguranca do Dependabot nao cobre action fixada por SHA; so' a "version
+# update" abaixo abre PR quando sai versao nova, trocando o SHA e o
+# comentario juntos.
+#
+# Agrupado num PR so' por semana: mantenedor solo, menos PR para revisar.
+# PR do Dependabot nao recebe os secrets do repositorio -- o passo do
+# promptfoo no verify.yml (HF_TOKEN) falha nesses PRs; isso nao indica
+# problema na atualizacao.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # espera 7 dias depois de uma versao sair antes de propor (versao nova e'
+    # quando um release malicioso ou quebrado faz mais estrago). Achado do
+    # Semgrep Guardian, 18/11/2026. github-actions so' aceita default-days.
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"

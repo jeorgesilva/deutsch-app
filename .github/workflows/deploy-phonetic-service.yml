@@ -17,6 +17,11 @@ on:
       - "services/shared/**"
   workflow_dispatch: {}
 
+# AI-4.6e: token do GitHub so' com leitura (o deploy usa o token da
+# Cloudflare, nao o do GitHub); Actions por SHA, versao no comentario.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -26,13 +31,15 @@ jobs:
       run:
         working-directory: services/phonetic-container
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
-      - run: npm install
+      # npm ci: instala exatamente o lockfile (wrangler incluso), sem resolver
+      # versao nova na hora do deploy
+      - run: npm ci
 
       # docker COPY nao alcanca fora do build context -- vendoriza o
       # minimo necessario de pipeline/ pra dentro deste diretorio antes de
