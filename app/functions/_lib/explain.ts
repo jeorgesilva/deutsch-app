@@ -6,6 +6,7 @@
 // OpinionEssayEngine/roleplay -- e' so' um fetch HTTPS externo, nao viola
 // "geracao e' sempre em lote" (essa regra e' sobre CRIAR exercicio, nao
 // sobre explicar uma resposta que o usuario acabou de dar).
+import { LLM_BUDGETS } from "./limits";
 import { chat, DEFAULT_CHAT_MODEL } from "./llmClient";
 import { Env, ExerciseRow } from "./types";
 
@@ -46,7 +47,7 @@ export async function explainAttempt(
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: lines.join("\n") },
       ],
-      0.4
+      { temperature: 0.4, ...LLM_BUDGETS.explain }
     );
     return content.trim();
   } catch {

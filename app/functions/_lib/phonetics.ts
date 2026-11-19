@@ -8,6 +8,8 @@
 // (sharedSecret aqui = env.PHONETIC_SHARED_SECRET, checado do lado de la
 // em services/phonetic-container/src/index.ts antes de repassar pro
 // container). Contrato HTTP em si (rotas/JSON) nao mudou nada.
+import { PHONETIC_TIMEOUT_MS } from "./limits";
+
 export interface PhoneticAlignmentBlock {
   op: "equal" | "replace" | "delete" | "insert";
   target: string[];
@@ -36,14 +38,25 @@ async function callService<T>(
   path: string,
   payload: unknown
 ): Promise<T> {
-  const res = await fetch(`${serviceUrl}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(sharedSecret ? { Authorization: `Bearer ${sharedSecret}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
+  // AI-4.2: sem timeout, um container travado prendia o request ate' o
+  // limite da plataforma. PHONETIC_TIMEOUT_MS cobre o cold start.
+  let res: Response;
+  try {
+    res = await fetch(`${serviceUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(sharedSecret ? { Authorization: `Bearer ${sharedSecret}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(PHONETIC_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if ((err as Error).name === "TimeoutError") {
+      throw new Error(`servico fonetico nao respondeu em ${PHONETIC_TIMEOUT_MS} ms em ${path}`);
+    }
+    throw err;
+  }
   if (!res.ok) {
     throw new Error(`servico fonetico respondeu ${res.status} em ${path}`);
   }

@@ -6,6 +6,7 @@
 import { getCurrentUser, unauthorized } from "../_lib/auth";
 import { explainAttempt } from "../_lib/explain";
 import { gradeAttempt } from "../_lib/grading";
+import { audioTooLong, MAX_AUDIO_BASE64_CHARS, MAX_CHARS, textTooLong } from "../_lib/limits";
 import { recordProgress } from "../_lib/progress";
 import { scoreReadAloud, scoreSpokenGapFill } from "../_lib/phonetics";
 import { AUDIO_FIRST_TEMPLATES, Env, ExerciseRow } from "../_lib/types";
@@ -65,6 +66,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (typeof body.audio_base64 !== "string") {
       return Response.json({ error: "audio_base64 e obrigatorio pra esse template" }, { status: 400 });
     }
+    if (body.audio_base64.length > MAX_AUDIO_BASE64_CHARS) return audioTooLong();
     return handlePhoneticAttempt(env, user.id, exercise, body.audio_base64);
   }
 
@@ -74,6 +76,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   if (typeof body.user_response !== "string") {
     return Response.json({ error: "user_response e obrigatorio" }, { status: 400 });
+  }
+  // AI-4.2: a resposta vai pro D1 e pro prompt do explainAttempt (que ja
+  // corta em 300 caracteres no prompt, mas nao no que grava).
+  if (body.user_response.length > MAX_CHARS.attemptResponse) {
+    return textTooLong("a resposta", MAX_CHARS.attemptResponse);
   }
 
   const grade = gradeAttempt(exercise, body.user_response);

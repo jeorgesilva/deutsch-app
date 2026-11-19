@@ -5,6 +5,7 @@
 // do OpinionEssayEngine, não há "ensure/reaproveita" -- cada tentativa é
 // um tópico novo, não existe "o mesmo tema da semana" pra reaproveitar.
 import { getCurrentUser, unauthorized } from "../_lib/auth";
+import { MAX_CHARS, textTooLong } from "../_lib/limits";
 import { generateQuickOpinionTopic, gradeQuickOpinion } from "../_lib/quickOpinion";
 import { Env } from "../_lib/types";
 
@@ -38,6 +39,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (typeof body?.text !== "string" || !body.text.trim()) {
     return Response.json({ error: "text é obrigatório" }, { status: 400 });
   }
+  // AI-4.2: o tópico também vem do cliente (devolvido pelo GET) e entra no prompt
+  if (body.topic.length > MAX_CHARS.quickOpinionTopic) return textTooLong("o tópico", MAX_CHARS.quickOpinionTopic);
+  if (body.text.length > MAX_CHARS.quickOpinionText) return textTooLong("a resposta", MAX_CHARS.quickOpinionText);
 
   let rubric;
   try {

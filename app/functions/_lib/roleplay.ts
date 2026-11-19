@@ -8,6 +8,8 @@
 // 0009_structured_speech.sql) ja nasceu com `engine`/`persona` como
 // colunas livres de proposito, pensado pra este momento -- nenhuma
 // migration nova precisou entrar pra generalizar.
+import { PublicError } from "./errors";
+import { LLM_BUDGETS, MAX_ROLEPLAY_USER_TURNS } from "./limits";
 import { chat, ChatMessage, DEFAULT_CHAT_MODEL, extractJsonObject } from "./llmClient";
 import { Env, RoleplayMessageRow, RoleplaySessionRow, SessionPlanRow } from "./types";
 
@@ -311,7 +313,7 @@ export async function startSession(
       { role: "system", content: persona.systemPrompt(topic) },
       { role: "user", content: "(início da sessão -- apresente o cenário e faça sua primeira pergunta/observação)" },
     ],
-    0.8
+    { temperature: 0.8, ...LLM_BUDGETS.roleplayOpening }
   );
 
   await env.DB.prepare(`INSERT INTO roleplay_messages (session_id, role, content) VALUES (?, 'assistant', ?)`)
@@ -338,13 +340,24 @@ export async function postMessage(env: Env, userId: number, sessionId: number, u
     .all<RoleplayMessageRow>();
   const history = results ?? [];
 
+  // AI-4.2: o historico inteiro vai em cada turno e na avaliacao de
+  // fechamento -- sem teto, o custo de uma sessao cresce sem limite. Checa
+  // antes de chamar o LLM e antes de gravar a fala.
+  const userTurns = history.filter((m) => m.role === "user").length;
+  if (userTurns >= MAX_ROLEPLAY_USER_TURNS) {
+    throw new PublicError(
+      `limite de ${MAX_ROLEPLAY_USER_TURNS} falas nesta sessão; encerre para ver a avaliação`,
+      409
+    );
+  }
+
   const messages: ChatMessage[] = [
     { role: "system", content: persona.systemPrompt(session.topic) },
     ...history.map((m) => ({ role: m.role, content: m.content }) as ChatMessage),
     { role: "user", content: userText },
   ];
 
-  const reply = await chat(env, DEFAULT_CHAT_MODEL, messages, 0.8);
+  const reply = await chat(env, DEFAULT_CHAT_MODEL, messages, { temperature: 0.8, ...LLM_BUDGETS.roleplayTurn });
 
   await env.DB.prepare(`INSERT INTO roleplay_messages (session_id, role, content) VALUES (?, 'user', ?)`)
     .bind(sessionId, userText)
@@ -381,7 +394,7 @@ export async function closeSession(env: Env, userId: number, sessionId: number):
       { role: "system", content: EVALUATION_SYSTEM_PROMPT },
       { role: "user", content: transcript || "(sessão encerrada sem nenhuma fala do usuário)" },
     ],
-    0.3
+    { temperature: 0.3, ...LLM_BUDGETS.roleplayEvaluation }
   );
   const evaluation = JSON.parse(extractJsonObject(raw));
 

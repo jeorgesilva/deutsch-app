@@ -18,7 +18,10 @@ import type { DurableObject, WorkflowEvent, WorkflowStep } from "cloudflare:work
 export class GenerationContainer extends Container<Env> {
   defaultPort = 8080;
   pingEndpoint = "/health";
-  sleepAfter = "30m";
+  // AI-4.2 (Tech DD, 18/11/2026): era 30m. So' acorda para o batch semanal e
+  // a regeneracao sob demanda, que mantem o container ocupado durante os
+  // steps; ocioso alem disso e' custo fora do spend limit (QA-5).
+  sleepAfter = "5m";
   // Explicito por clareza de leitura, mesmo sendo o default do pacote.
   enableInternet = true;
 

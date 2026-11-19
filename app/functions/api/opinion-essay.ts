@@ -5,6 +5,7 @@
 // correction_json ja usado no schema (attempts), so que este e' o primeiro
 // engine a de fato preencher correction_json.
 import { getCurrentUser, unauthorized } from "../_lib/auth";
+import { MAX_CHARS, textTooLong } from "../_lib/limits";
 import { gradeOpinionEssay } from "../_lib/llm";
 import { ensureEssayExercise, getActiveEssayPlan, latestEssayAttempt, parseTargetVocabulary, WORD_TARGET } from "../_lib/opinionEssay";
 import { Env } from "../_lib/types";
@@ -49,6 +50,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (typeof body?.text !== "string" || !body.text.trim()) {
     return Response.json({ error: "text e obrigatorio" }, { status: 400 });
   }
+  if (body.text.length > MAX_CHARS.essayText) return textTooLong("o texto", MAX_CHARS.essayText);
 
   const exerciseId = await ensureEssayExercise(env.DB, plan);
   const targetVocabulary = parseTargetVocabulary(plan.target_vocabulary);

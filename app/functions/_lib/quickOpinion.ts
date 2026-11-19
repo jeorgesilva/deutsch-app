@@ -5,6 +5,7 @@
 // quando nenhum topico fixo existe). Rubrica LEVE de proposito -- resposta
 // e' curta e espontanea, diferente do OpinionEssayEngine (~230 palavras,
 // estrutura de 4 partes obrigatoria).
+import { LLM_BUDGETS } from "./limits";
 import { chat, DEFAULT_CHAT_MODEL, extractJsonObject } from "./llmClient";
 import { Env } from "./types";
 
@@ -22,7 +23,7 @@ export async function generateQuickOpinionTopic(env: Env): Promise<string> {
       { role: "system", content: TOPIC_SYSTEM_PROMPT },
       { role: "user", content: "Gere um tópico novo, diferente dos clichês mais óbvios." },
     ],
-    0.9
+    { temperature: 0.9, ...LLM_BUDGETS.quickOpinionTopic }
   );
   return raw.trim();
 }
@@ -65,7 +66,7 @@ export async function gradeQuickOpinion(env: Env, topic: string, text: string): 
       { role: "system", content: GRADE_SYSTEM_PROMPT },
       { role: "user", content: `Tópico: ${topic}\n\nResposta do usuário:\n${text}` },
     ],
-    0.3
+    { temperature: 0.3, ...LLM_BUDGETS.quickOpinionRubric }
   );
   return JSON.parse(extractJsonObject(content)) as QuickOpinionRubric;
 }

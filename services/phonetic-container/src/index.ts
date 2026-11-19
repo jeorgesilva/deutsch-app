@@ -11,7 +11,11 @@ export class PhoneticContainer extends Container {
   // service.py expoe /health (nao o "/ping" default do pacote) -- setar
   // explicito, senao o probe de startup bate em rota inexistente.
   pingEndpoint = "/health";
-  sleepAfter = "30m";
+  // AI-4.2 (Tech DD, 18/11/2026): era 30m. Container fica fora do spend
+  // limit da Cloudflare (QA-5), entao tempo ocioso acordado e' custo sem teto.
+  // 10m e nao 5m: o cold start carrega wav2vec2/faster-whisper, e uma sessao
+  // que alterna itens de texto e de voz pegaria cold start a toda hora.
+  sleepAfter = "10m";
   // modelos ja vem baked-in na imagem (Dockerfile baixa em build-time) --
   // o container nao precisa de rede em runtime, entao mantem fechado por
   // padrao (defesa em profundidade, nao um requisito funcional).

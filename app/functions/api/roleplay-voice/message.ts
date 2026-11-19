@@ -6,6 +6,8 @@
 // user_text volta na resposta pra o usuario CONFERIR o que foi entendido
 // -- transparencia sobre o STT, nao so' um "confie em mim".
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
+import { PublicError, publicErrorResponse } from "../../_lib/errors";
+import { audioTooLong, MAX_AUDIO_BASE64_CHARS } from "../../_lib/limits";
 import { transcribeAudio, synthesizeSpeech } from "../../_lib/phonetics";
 import { postMessage } from "../../_lib/roleplay";
 import { Env } from "../../_lib/types";
@@ -31,6 +33,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (typeof body?.audio_base64 !== "string" || !body.audio_base64) {
     return Response.json({ error: "audio_base64 é obrigatório" }, { status: 400 });
   }
+  if (body.audio_base64.length > MAX_AUDIO_BASE64_CHARS) return audioTooLong();
 
   let userText: string;
   try {
@@ -47,6 +50,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     replyText = await postMessage(env, user.id, body.session_id, userText);
   } catch (err) {
+    if (err instanceof PublicError) return publicErrorResponse(err);
     return Response.json({ error: (err as Error).message }, { status: 502 });
   }
 

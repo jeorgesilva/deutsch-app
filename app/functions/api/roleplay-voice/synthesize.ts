@@ -8,6 +8,7 @@
 // mais nada pra combinar na resposta (diferente de /roleplay-voice/message,
 // que precisa devolver texto + audio juntos).
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
+import { MAX_CHARS, textTooLong } from "../../_lib/limits";
 import { synthesizeSpeech } from "../../_lib/phonetics";
 import { Env } from "../../_lib/types";
 
@@ -28,6 +29,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (typeof body?.text !== "string" || !body.text.trim()) {
     return Response.json({ error: "text é obrigatório" }, { status: 400 });
   }
+  // AI-4.2: o texto vem do cliente e vai direto pro Piper no container
+  if (body.text.length > MAX_CHARS.synthesizeText) return textTooLong("o texto", MAX_CHARS.synthesizeText);
 
   try {
     const { audio_base64 } = await synthesizeSpeech(serviceUrl, env.PHONETIC_SHARED_SECRET, body.text);
