@@ -7,6 +7,8 @@
 import { Env } from "./types";
 
 const PBKDF2_ITERATIONS = 100_000;
+const SALT_BYTES = 16;
+const HASH_BITS = 256;
 const SESSION_DAYS = 30;
 
 function toHex(bytes: ArrayBuffer | Uint8Array): string {
@@ -29,13 +31,13 @@ async function pbkdf2(password: string, salt: Uint8Array, iterations: number): P
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
     keyMaterial,
-    256
+    HASH_BITS
   );
   return toHex(bits);
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const hash = await pbkdf2(password, salt, PBKDF2_ITERATIONS);
   return `pbkdf2$${PBKDF2_ITERATIONS}$${toHex(salt)}$${hash}`;
 }
@@ -55,10 +57,50 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return diff === 0;
 }
 
+// Tech DD 18/11/2026 (achado na 2d, mesma classe da 4.6a): sem isto, o login
+// de e-mail inexistente pulava o PBKDF2 e respondia mais rapido -- o tempo
+// revelava quem tem conta. login.ts verifica contra este hash quando o
+// usuario nao existe, para gastar o mesmo tempo.
+// Montado com as MESMAS constantes de hashPassword (iteracoes, tamanho do
+// salt e do hash): um valor curto ou mal formado faria verifyPassword sair
+// cedo por outro motivo (parse, tamanho) e a diferenca de tempo voltaria.
+// Salt e hash fixos e de mentira -- nenhuma senha gera este hash.
+export const DUMMY_PASSWORD_HASH = `pbkdf2$${PBKDF2_ITERATIONS}$${"5a".repeat(SALT_BYTES)}$${"a5".repeat(HASH_BITS / 8)}`;
+
 export interface CurrentUser {
   id: number;
   email: string;
   display_name: string;
+}
+
+// AI-4.1 (Tech DD, 18/11/2026) -- o app deixou de ser multiusuario aberto:
+// so' os e-mails de ALLOWED_EMAILS existem para o app. A checagem vale no
+// cadastro, no login e em toda leitura de sessao, entao uma conta antiga
+// fora da lista perde a sessao no proximo request, sem precisar apagar nada.
+// Falha fechada: sem a variavel, ninguem passa -- um secret esquecido
+// trava o app, em vez de reabrir o cadastro.
+export function parseAllowedEmails(raw: string | undefined): Set<string> {
+  const emails = new Set<string>();
+  for (const part of (raw ?? "").split(",")) {
+    const email = part.trim().toLowerCase();
+    if (email) emails.add(email);
+  }
+  return emails;
+}
+
+let warnedMissingAllowlist = false;
+
+export function isEmailAllowed(env: Pick<Env, "ALLOWED_EMAILS">, email: string): boolean {
+  const allowed = parseAllowedEmails(env.ALLOWED_EMAILS);
+  if (allowed.size === 0) {
+    // uma vez por isolate -- getUserBySessionToken roda em todo request
+    if (!warnedMissingAllowlist) {
+      console.error("ALLOWED_EMAILS ausente ou vazio: cadastro, login e sessoes negados (AI-4.1)");
+      warnedMissingAllowlist = true;
+    }
+    return false;
+  }
+  return allowed.has(email.trim().toLowerCase());
 }
 
 const COOKIE_NAME = "session_token";
@@ -107,7 +149,8 @@ export async function getUserBySessionToken(env: Env, token: string): Promise<Cu
   )
     .bind(token, new Date().toISOString())
     .first<CurrentUser>();
-  return row ?? null;
+  if (!row || !isEmailAllowed(env, row.email)) return null;
+  return row;
 }
 
 // todo handler autenticado abre com:

@@ -185,4 +185,10 @@ export interface Env {
   // nunca teve).
   GENERATION_SERVICE_URL?: string;
   GENERATION_SHARED_SECRET?: string;
+  // AI-4.1 (Tech DD, 18/11/2026) -- app pessoal e fechado. E-mails
+  // separados por virgula que podem se cadastrar, entrar e manter sessao.
+  // Secret do Pages (`wrangler pages secret put ALLOWED_EMAILS`) e
+  // .dev.vars local, nunca [vars] no wrangler.toml. Ausente ou vazio =
+  // ninguem passa (ver isEmailAllowed em _lib/auth.ts).
+  ALLOWED_EMAILS?: string;
 }
