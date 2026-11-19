@@ -5,6 +5,7 @@
 // segredo compartilhado antes de repassar pro container -- sem isso,
 // qualquer um que ache a URL publica consumiria inferencia (paga) a toa.
 import { Container } from "@cloudflare/containers";
+import { isAuthorizedBearer } from "../../shared/bearer";
 
 export class PhoneticContainer extends Container {
   defaultPort = 8080;
@@ -24,7 +25,9 @@ export class PhoneticContainer extends Container {
 
 interface Env {
   PHONETIC_CONTAINER: DurableObjectNamespace<PhoneticContainer>;
-  PHONETIC_SHARED_SECRET: string;
+  // opcional no tipo porque pode faltar em runtime -- isAuthorizedBearer
+  // nega tudo nesse caso (AI-4.6a)
+  PHONETIC_SHARED_SECRET?: string;
 }
 
 const SINGLETON_ID = "singleton";
@@ -38,8 +41,10 @@ export default {
       return Response.json({ status: "ok" });
     }
 
-    const auth = request.headers.get("Authorization");
-    if (auth !== `Bearer ${env.PHONETIC_SHARED_SECRET}`) {
+    if (!env.PHONETIC_SHARED_SECRET) {
+      console.error("PHONETIC_SHARED_SECRET ausente: todo request autenticado responde 401 (AI-4.6a)");
+    }
+    if (!isAuthorizedBearer(request.headers.get("Authorization"), env.PHONETIC_SHARED_SECRET)) {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
 

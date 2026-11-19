@@ -19,6 +19,9 @@ on:
       # fica commitado mas nunca chega no container até alguém lembrar de
       # rodar o workflow manualmente.
       - "pipeline/src/deutsch_pipeline/**"
+      # AI-4.6a: codigo TS compartilhado pelos dois Workers de container
+      # (bearer.ts) -- mesmo motivo do path de pipeline/ acima.
+      - "services/shared/**"
   workflow_dispatch: {}
 
 jobs:

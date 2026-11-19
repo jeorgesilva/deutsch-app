@@ -14,6 +14,7 @@
 import { Container } from "@cloudflare/containers";
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { DurableObject, WorkflowEvent, WorkflowStep } from "cloudflare:workers";
+import { isAuthorizedBearer } from "../../shared/bearer";
 
 export class GenerationContainer extends Container<Env> {
   defaultPort = 8080;
@@ -58,7 +59,9 @@ export class GenerationContainer extends Container<Env> {
 
 interface Env {
   GENERATION_CONTAINER: DurableObjectNamespace<GenerationContainer>;
-  GENERATION_SHARED_SECRET: string;
+  // opcional no tipo porque pode faltar em runtime -- isAuthorizedBearer
+  // nega tudo nesse caso (AI-4.6a)
+  GENERATION_SHARED_SECRET?: string;
   GEMINI_API_KEY?: string;
   HUGGINGFACE_API_KEY?: string;
   CLOUDFLARE_API_TOKEN?: string;
@@ -414,8 +417,10 @@ export default {
       return Response.json({ status: "ok" });
     }
 
-    const auth = request.headers.get("Authorization");
-    if (auth !== `Bearer ${env.GENERATION_SHARED_SECRET}`) {
+    if (!env.GENERATION_SHARED_SECRET) {
+      console.error("GENERATION_SHARED_SECRET ausente: todo request autenticado responde 401 (AI-4.6a)");
+    }
+    if (!isAuthorizedBearer(request.headers.get("Authorization"), env.GENERATION_SHARED_SECRET)) {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
 

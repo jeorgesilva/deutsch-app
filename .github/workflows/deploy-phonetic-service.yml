@@ -12,6 +12,9 @@ on:
       # mesmo achado do deploy-generation-service.yml (Fase 15): mudança em
       # código VENDORIZADO de pipeline/ não disparava redeploy sozinha.
       - "pipeline/src/deutsch_pipeline/**"
+      # AI-4.6a: codigo TS compartilhado pelos dois Workers de container
+      # (bearer.ts) -- mesmo motivo do path de pipeline/ acima.
+      - "services/shared/**"
   workflow_dispatch: {}
 
 jobs:
