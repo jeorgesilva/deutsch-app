@@ -36,6 +36,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+          # sem isto o setup-node usa o patch do cache do runner, nao o mais novo
+          check-latest: true
 
       # npm ci: instala exatamente o lockfile (wrangler incluso), sem resolver
       # versao nova na hora do deploy
