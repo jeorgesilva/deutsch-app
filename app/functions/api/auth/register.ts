@@ -1,7 +1,11 @@
 // POST /api/auth/register -- Fase 13. body {email, password, display_name}.
 // Cria a conta, ja abre sessao (mesmo Set-Cookie do /login) -- registro
 // nao exige login separado logo em seguida.
-import { createSession, hashPassword, sessionCookieHeader } from "../../_lib/auth";
+// AI-4.1/4.6b (Tech DD, 18/11/2026): cadastro fechado -- so' e-mail de
+// ALLOWED_EMAILS que ainda nao tem conta. Fora da lista e ja cadastrado
+// recebem a MESMA resposta, para nao revelar quem tem conta nem quem esta
+// na lista.
+import { createSession, hashPassword, isEmailAllowed, sessionCookieHeader } from "../../_lib/auth";
 import { Env } from "../../_lib/types";
 
 interface Body {
@@ -27,8 +31,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const existing = await env.DB.prepare(`SELECT id FROM users WHERE email = ?`).bind(email).first<{ id: number }>();
-  if (existing) {
-    return Response.json({ error: "já existe uma conta com esse email" }, { status: 409 });
+  if (existing || !isEmailAllowed(env, email)) {
+    return Response.json({ error: "cadastro fechado" }, { status: 403 });
   }
 
   const passwordHash = await hashPassword(password);

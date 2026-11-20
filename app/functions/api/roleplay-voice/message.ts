@@ -6,6 +6,8 @@
 // user_text volta na resposta pra o usuario CONFERIR o que foi entendido
 // -- transparencia sobre o STT, nao so' um "confie em mim".
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
+import { logServerError, PUBLIC_MESSAGES, upstreamFailure } from "../../_lib/errors";
+import { audioTooLong, MAX_AUDIO_BASE64_CHARS } from "../../_lib/limits";
 import { transcribeAudio, synthesizeSpeech } from "../../_lib/phonetics";
 import { postMessage } from "../../_lib/roleplay";
 import { Env } from "../../_lib/types";
@@ -21,7 +23,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const serviceUrl = env.PHONETIC_SERVICE_URL;
   if (!serviceUrl) {
-    return Response.json({ error: "PHONETIC_SERVICE_URL não configurado" }, { status: 500 });
+    console.error("PHONETIC_SERVICE_URL ausente (roleplay-voice/message)");
+    return Response.json({ error: PUBLIC_MESSAGES.phoneticNotConfigured }, { status: 500 });
   }
 
   const body = (await request.json()) as Body;
@@ -31,13 +34,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (typeof body?.audio_base64 !== "string" || !body.audio_base64) {
     return Response.json({ error: "audio_base64 é obrigatório" }, { status: 400 });
   }
+  if (body.audio_base64.length > MAX_AUDIO_BASE64_CHARS) return audioTooLong();
 
   let userText: string;
   try {
     const transcribed = await transcribeAudio(serviceUrl, env.PHONETIC_SHARED_SECRET, body.audio_base64);
     userText = transcribed.text.trim();
   } catch (err) {
-    return Response.json({ error: `serviço fonético indisponível (${(err as Error).message})` }, { status: 502 });
+    return upstreamFailure("roleplay-voice/message: transcrever", err, PUBLIC_MESSAGES.phonetic);
   }
   if (!userText) {
     return Response.json({ error: "não entendi nada na gravação -- tente de novo, falando um pouco mais alto" }, { status: 422 });
@@ -47,7 +51,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     replyText = await postMessage(env, user.id, body.session_id, userText);
   } catch (err) {
-    return Response.json({ error: (err as Error).message }, { status: 502 });
+    return upstreamFailure("roleplay-voice/message: responder", err, PUBLIC_MESSAGES.llm);
   }
 
   try {
@@ -57,6 +61,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // so' a sintese falhou -- o turno de conversa (texto) ja foi gravado
     // com sucesso, nao vale jogar fora; usuario so' perde o audio desta
     // resposta e ve o texto normalmente.
-    return Response.json({ user_text: userText, message: replyText, audio_base64: null, tts_error: (err as Error).message });
+    logServerError("roleplay-voice/message: sintetizar", err);
+    return Response.json({ user_text: userText, message: replyText, audio_base64: null, tts_error: PUBLIC_MESSAGES.tts });
   }
 };

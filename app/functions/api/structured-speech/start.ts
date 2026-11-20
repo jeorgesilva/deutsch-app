@@ -2,6 +2,7 @@
 // devolve a primeira fala do moderador (o usuario nunca comeca em branco,
 // o moderador abre apresentando o tema e pedindo a posicao inicial).
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
+import { PUBLIC_MESSAGES, upstreamFailure } from "../../_lib/errors";
 import { getActiveSpeechPlan, startSession } from "../../_lib/roleplay";
 import { Env } from "../../_lib/types";
 
@@ -18,6 +19,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const { sessionId, openingMessage } = await startSession(env, user.id, "StructuredSpeechEngine", "moderador", plan.theme_text);
     return Response.json({ session_id: sessionId, message: openingMessage });
   } catch (err) {
-    return Response.json({ error: `falha ao iniciar sessao: ${(err as Error).message}` }, { status: 502 });
+    return upstreamFailure("structured-speech/start", err, PUBLIC_MESSAGES.llm);
   }
 };

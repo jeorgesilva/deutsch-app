@@ -7,6 +7,16 @@ on:
   pull_request:
     branches: [ main ]
 
+# AI-4.6e (Tech DD, 18/11/2026): token do GitHub so' com leitura; Actions
+# fixadas por SHA (o comentario ao lado e' a versao, que o Dependabot
+# atualiza junto -- .github/dependabot.yml); ferramentas com versao exata.
+# Runtimes (Node/Python) seguem a linha da versao de proposito, para os
+# patches de seguranca chegarem sozinhos. No Node isso exige check-latest:
+# sem ele, o setup-node usa o patch que estiver no cache do runner
+# (CVE-2026-111497: o deploy de 17/11 pegou 22.23.4 do cache).
+permissions:
+  contents: read
+
 jobs:
   python-and-llmops-audit:
     name: Python Static Audit & LLMOps Prompt Validation
@@ -14,18 +24,18 @@ jobs:
 
     steps:
       - name: Checkout Repository Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Python Runtime
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
           cache: 'pip'
 
       - name: Install Analysis Dependencies
+        # mesma versao do .venv local (vulture 2.16)
         run: |
-          python -m pip install --upgrade pip
-          pip install vulture
+          pip install vulture==2.16
 
       - name: Execute Vulture Audit Gate
         run: |
@@ -34,12 +44,16 @@ jobs:
 
       # --- AUTOMATED PROMPT EVALUATION GATE ---
       - name: Set up Node.js Runtime for Promptfoo
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '26.x'
+          check-latest: true
 
       - name: Run Automated LLMOps Evaluation Sweep
-        run: npx promptfoo eval --no-cache
+        # versao exata: este passo roda com o HF_TOKEN no ambiente. Residuo:
+        # as dependencias do promptfoo ainda sao resolvidas na hora (npx nao
+        # tem lockfile).
+        run: npx --yes promptfoo@0.125.1 eval --no-cache
         env:
           # Securely binding your Hugging Face Pro token from GitHub Repository Secrets
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -50,12 +64,13 @@ jobs:
 
     steps:
       - name: Checkout Repository Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Node.js Runtime
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '26.x'
+          check-latest: true
           cache: 'npm'
           cache-dependency-path: app/package-lock.json
 
@@ -72,5 +87,5 @@ jobs:
       - name: Inspect Production Dependency Layouts
         run: |
           cd app
-          npx depcheck . --ignores="typescript,vitest,wrangler" || true
+          npx --yes depcheck@1.4.7 . --ignores="typescript,vitest,wrangler" || true
 

@@ -4,8 +4,10 @@
 // user_response} pros 18 templates de texto, {exercise_id, audio_base64}
 // pra ReadAloudEngine/SpokenGapFillEngine.
 import { getCurrentUser, unauthorized } from "../_lib/auth";
+import { PUBLIC_MESSAGES, upstreamFailure } from "../_lib/errors";
 import { explainAttempt } from "../_lib/explain";
 import { gradeAttempt } from "../_lib/grading";
+import { audioTooLong, MAX_AUDIO_BASE64_CHARS, MAX_CHARS, textTooLong } from "../_lib/limits";
 import { recordProgress } from "../_lib/progress";
 import { scoreReadAloud, scoreSpokenGapFill } from "../_lib/phonetics";
 import { AUDIO_FIRST_TEMPLATES, Env, ExerciseRow } from "../_lib/types";
@@ -65,6 +67,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (typeof body.audio_base64 !== "string") {
       return Response.json({ error: "audio_base64 e obrigatorio pra esse template" }, { status: 400 });
     }
+    if (body.audio_base64.length > MAX_AUDIO_BASE64_CHARS) return audioTooLong();
     return handlePhoneticAttempt(env, user.id, exercise, body.audio_base64);
   }
 
@@ -74,6 +77,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   if (typeof body.user_response !== "string") {
     return Response.json({ error: "user_response e obrigatorio" }, { status: 400 });
+  }
+  // AI-4.2: a resposta vai pro D1 e pro prompt do explainAttempt (que ja
+  // corta em 300 caracteres no prompt, mas nao no que grava).
+  if (body.user_response.length > MAX_CHARS.attemptResponse) {
+    return textTooLong("a resposta", MAX_CHARS.attemptResponse);
   }
 
   const grade = gradeAttempt(exercise, body.user_response);
@@ -135,7 +143,8 @@ async function handleShadowingAttempt(env: Env, userId: number, exerciseId: numb
 async function handlePhoneticAttempt(env: Env, userId: number, exercise: ExerciseRow, audioBase64: string): Promise<Response> {
   const serviceUrl = env.PHONETIC_SERVICE_URL;
   if (!serviceUrl) {
-    return Response.json({ error: "PHONETIC_SERVICE_URL nao configurado" }, { status: 500 });
+    console.error("PHONETIC_SERVICE_URL ausente (attempts)");
+    return Response.json({ error: PUBLIC_MESSAGES.phoneticNotConfigured }, { status: 500 });
   }
 
   let userResponse: string | null = null;
@@ -158,10 +167,7 @@ async function handlePhoneticAttempt(env: Env, userId: number, exercise: Exercis
       pronunciation = score.pronunciation;
     }
   } catch (err) {
-    return Response.json(
-      { error: `servico fonetico indisponivel (${(err as Error).message})` },
-      { status: 502 }
-    );
+    return upstreamFailure("attempts: servico fonetico", err, PUBLIC_MESSAGES.phonetic);
   }
 
   const attemptResult = await env.DB.prepare(

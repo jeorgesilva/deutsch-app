@@ -5,6 +5,11 @@ Dois projetos independentes, cada um com Worker TS (`src/index.ts`, Durable Obje
 - `phonetic-container/`: serve `deutsch_pipeline.phonetics.service` (correção fonética, STT, TTS). `enableInternet = false`, modelos wav2vec2/faster-whisper embutidos na imagem.
 - `generation-container/`: serve `deutsch_pipeline.generation.service` (geração sob demanda por tópico, item diário de vídeo/leitura). O batch diário é o `DailyBatchWorkflow` (Cloudflare Workflows, `schedules = ["0 4 * * *"]` no `wrangler.toml`): **só leitura**, um step por bloco, com o heartbeat no último step. Não é Cron Trigger + `scheduled()`, que era cortado aos 15 min. `/run-daily-batch` cria uma instância manual. **Vídeo não roda na nuvem:** o YouTube devolve 429 no download de legenda para o IP do container, e a ingestão de vídeo é local (ver `CLAUDE.md` raiz). `/generate-video-item` continua existindo no container, mas nada o chama. `enableInternet = true`.
 
+## shared/
+
+- `shared/bearer.ts`: `isAuthorizedBearer`, a checagem do `Bearer` dos dois Workers (tempo constante, nega tudo sem secret). Os dois `src/index.ts` importam a mesma função: não duplicar. O wrangler empacota o arquivo no bundle de cada Worker; o Docker não o usa.
+- Os dois workflows de deploy observam `services/shared/**`, então mudar algo aqui redeploya os **dois** containers.
+
 ## vendor/ e prepare-vendor.sh
 
 - Docker `COPY` não alcança fora do diretório do container, então `prepare-vendor.sh` copia código do pipeline para `vendor/` (gitignored) antes de buildar. `npm run deploy`/`npm run dev` rodam o vendor primeiro; o CI chama o script direto.

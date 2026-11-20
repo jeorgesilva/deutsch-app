@@ -28,7 +28,7 @@
 
 ## Ambiente local — quirks
 
-- Configuração local em `app/.dev.vars` (gitignored) — **o arquivo não existe hoje**. Variáveis lidas pelo Worker: `PHONETIC_SERVICE_URL`, `PHONETIC_SHARED_SECRET`, `HUGGINGFACE_API_KEY`, `GENERATION_SERVICE_URL`, `GENERATION_SHARED_SECRET`. Bindings: `DB` (D1), `MEDIA` (R2).
+- Configuração local em `app/.dev.vars` (gitignored) — **o arquivo não existe hoje**. Variáveis lidas pelo Worker: `PHONETIC_SERVICE_URL`, `PHONETIC_SHARED_SECRET`, `HUGGINGFACE_API_KEY`, `GENERATION_SERVICE_URL`, `GENERATION_SHARED_SECRET`, `ALLOWED_EMAILS` (sem ela ninguém entra, nem localmente). Bindings: `DB` (D1), `MEDIA` (R2).
 
 Quatro regras (procedimentos completos em `docs/local-dev-troubleshooting.md`):
 

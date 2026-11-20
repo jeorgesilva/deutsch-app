@@ -3,6 +3,7 @@
 // vazio) pra cada um dos 5 escopos do motor semanal. POST faz upsert de
 // quando/onde/data, ou marca concluido (body.complete = true).
 import { getCurrentUser, unauthorized } from "../_lib/auth";
+import { MAX_CHARS, textTooLong } from "../_lib/limits";
 import { completePlan, listActivePlans, upsertPlan } from "../_lib/sessionPlans";
 import { Env, GRUPO_B_SCOPES } from "../_lib/types";
 
@@ -40,6 +41,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const body = (await request.json()) as Body;
   if (!body?.scope || !VALID_SCOPES.has(body.scope)) {
     return Response.json({ error: "scope invalido" }, { status: 400 });
+  }
+  // AI-4.2: tema e vocabulario-alvo entram no system prompt do roleplay e da
+  // redacao a cada chamada.
+  if (typeof body.theme_text === "string" && body.theme_text.length > MAX_CHARS.planThemeText) {
+    return textTooLong("o tema", MAX_CHARS.planThemeText);
+  }
+  if (typeof body.target_vocabulary === "string" && body.target_vocabulary.length > MAX_CHARS.planTargetVocabulary) {
+    return textTooLong("o vocabulário-alvo", MAX_CHARS.planTargetVocabulary);
   }
 
   if (body.complete) {

@@ -19,7 +19,15 @@ on:
       # fica commitado mas nunca chega no container até alguém lembrar de
       # rodar o workflow manualmente.
       - "pipeline/src/deutsch_pipeline/**"
+      # AI-4.6a: codigo TS compartilhado pelos dois Workers de container
+      # (bearer.ts) -- mesmo motivo do path de pipeline/ acima.
+      - "services/shared/**"
   workflow_dispatch: {}
+
+# AI-4.6e: token do GitHub so' com leitura (o deploy usa o token da
+# Cloudflare, nao o do GitHub); Actions por SHA, versao no comentario.
+permissions:
+  contents: read
 
 jobs:
   deploy:
@@ -32,13 +40,17 @@ jobs:
       run:
         working-directory: services/generation-container
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+          # sem isto o setup-node usa o patch do cache do runner, nao o mais novo
+          check-latest: true
 
-      - run: npm install
+      # npm ci: instala exatamente o lockfile (wrangler incluso), sem resolver
+      # versao nova na hora do deploy
+      - run: npm ci
 
       # docker COPY nao alcanca fora do build context -- vendoriza o
       # minimo necessario de pipeline/ pra dentro deste diretorio antes de

@@ -1,5 +1,6 @@
 // POST /api/auth/login -- Fase 13. body {email, password}.
-import { createSession, sessionCookieHeader, verifyPassword } from "../../_lib/auth";
+import { createSession, DUMMY_PASSWORD_HASH, isEmailAllowed, sessionCookieHeader, verifyPassword } from "../../_lib/auth";
+import { clientIp, LOGIN_WINDOW_MINUTES, releaseLoginAttempt, reserveLoginAttempt } from "../../_lib/loginThrottle";
 import { Env } from "../../_lib/types";
 
 interface Body {
@@ -23,15 +24,48 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return Response.json({ error: "email e senha são obrigatórios" }, { status: 400 });
   }
 
+  // AI-4.1: a vaga é reservada ANTES da senha, num passo atômico (ver
+  // _lib/loginThrottle.ts) -- sem isso, requests simultâneos passavam todos
+  // pela contagem. Tentativa bloqueada não gasta PBKDF2 nem grava linha. Se
+  // a tabela não existir (migration 0014 não aplicada), falha fechada com
+  // erro legível em vez de liberar o login sem limite.
+  const ip = clientIp(request);
+  let attemptId: number | null;
+  try {
+    attemptId = await reserveLoginAttempt(env.DB, ip, email);
+  } catch (err) {
+    console.error("login: falha ao reservar em login_failures", err);
+    return Response.json({ error: "login temporariamente indisponível" }, { status: 503 });
+  }
+  if (attemptId === null) {
+    return Response.json(
+      { error: `muitas tentativas de login; espere ${LOGIN_WINDOW_MINUTES} minutos e tente de novo` },
+      { status: 429, headers: { "Retry-After": String(LOGIN_WINDOW_MINUTES * 60) } }
+    );
+  }
+
   const user = await env.DB.prepare(`SELECT id, email, display_name, password_hash FROM users WHERE email = ?`)
     .bind(email)
     .first<UserRow>();
 
   // mesma mensagem genérica pros dois casos (email inexistente ou senha
   // errada) -- não revelar se um email está cadastrado ou não.
-  if (!user || !(await verifyPassword(password, user.password_hash))) {
+  // AI-4.1: conta fora de ALLOWED_EMAILS cai na mesma mensagem. A checagem
+  // vem depois da senha, então o tempo de resposta não denuncia a lista.
+  // O PBKDF2 roda SEMPRE: sem usuário, contra DUMMY_PASSWORD_HASH -- senão
+  // o e-mail inexistente responderia mais rápido e o tempo revelaria quem
+  // tem conta. O `!user` continua na condição: o hash de mentira nunca loga.
+  const passwordOk = await verifyPassword(password, user?.password_hash ?? DUMMY_PASSWORD_HASH);
+  if (!user || !passwordOk || !isEmailAllowed(env, user.email)) {
+    // a linha reservada fica: é a falha registrada
     return Response.json({ error: "email ou senha incorretos" }, { status: 401 });
   }
+
+  // login certo: libera a vaga. Uma falha aqui não impede o login, só deixa
+  // a tentativa contando até sair da janela.
+  await releaseLoginAttempt(env.DB, attemptId).catch((err) =>
+    console.error("login: falha ao liberar a vaga em login_failures", err)
+  );
 
   const { token, maxAgeSeconds } = await createSession(env, user.id);
 

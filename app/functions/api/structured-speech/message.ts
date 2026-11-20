@@ -2,6 +2,8 @@
 // turno do usuario, devolve a resposta do moderador. Nunca corrige/avalia
 // aqui -- so' no /close (evita quebrar a imersao no meio da conversa).
 import { getCurrentUser, unauthorized } from "../../_lib/auth";
+import { PUBLIC_MESSAGES, upstreamFailure } from "../../_lib/errors";
+import { MAX_CHARS, textTooLong } from "../../_lib/limits";
 import { postMessage } from "../../_lib/roleplay";
 import { Env } from "../../_lib/types";
 
@@ -21,11 +23,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (typeof body.text !== "string" || !body.text.trim()) {
     return Response.json({ error: "text e obrigatorio" }, { status: 400 });
   }
+  if (body.text.length > MAX_CHARS.roleplayMessage) return textTooLong("a mensagem", MAX_CHARS.roleplayMessage);
 
   try {
     const reply = await postMessage(env, user.id, body.session_id, body.text);
     return Response.json({ message: reply });
   } catch (err) {
-    return Response.json({ error: (err as Error).message }, { status: 502 });
+    return upstreamFailure("structured-speech/message", err, PUBLIC_MESSAGES.llm);
   }
 };

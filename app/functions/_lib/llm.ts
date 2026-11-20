@@ -12,6 +12,7 @@
 // model, sem tocar neste arquivo (decisao do usuario). Este arquivo so'
 // cuida do que e' especifico do OpinionEssayEngine: o prompt e o formato
 // da rubrica.
+import { LLM_BUDGETS } from "./limits";
 import { chat, DEFAULT_CHAT_MODEL, extractJsonObject } from "./llmClient";
 import { Env } from "./types";
 
@@ -76,7 +77,7 @@ export async function gradeOpinionEssay(
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: buildUserPrompt(theme, targetVocabulary, text) },
     ],
-    0.3
+    { temperature: 0.3, ...LLM_BUDGETS.essayRubric }
   );
   return JSON.parse(extractJsonObject(content)) as EssayRubric;
 }

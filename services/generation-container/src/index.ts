@@ -14,11 +14,15 @@
 import { Container } from "@cloudflare/containers";
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { DurableObject, WorkflowEvent, WorkflowStep } from "cloudflare:workers";
+import { isAuthorizedBearer } from "../../shared/bearer";
 
 export class GenerationContainer extends Container<Env> {
   defaultPort = 8080;
   pingEndpoint = "/health";
-  sleepAfter = "30m";
+  // AI-4.2 (Tech DD, 18/11/2026): era 30m. So' acorda para o batch semanal e
+  // a regeneracao sob demanda, que mantem o container ocupado durante os
+  // steps; ocioso alem disso e' custo fora do spend limit (QA-5).
+  sleepAfter = "5m";
   // Explicito por clareza de leitura, mesmo sendo o default do pacote.
   enableInternet = true;
 
@@ -55,7 +59,9 @@ export class GenerationContainer extends Container<Env> {
 
 interface Env {
   GENERATION_CONTAINER: DurableObjectNamespace<GenerationContainer>;
-  GENERATION_SHARED_SECRET: string;
+  // opcional no tipo porque pode faltar em runtime -- isAuthorizedBearer
+  // nega tudo nesse caso (AI-4.6a)
+  GENERATION_SHARED_SECRET?: string;
   GEMINI_API_KEY?: string;
   HUGGINGFACE_API_KEY?: string;
   CLOUDFLARE_API_TOKEN?: string;
@@ -411,8 +417,10 @@ export default {
       return Response.json({ status: "ok" });
     }
 
-    const auth = request.headers.get("Authorization");
-    if (auth !== `Bearer ${env.GENERATION_SHARED_SECRET}`) {
+    if (!env.GENERATION_SHARED_SECRET) {
+      console.error("GENERATION_SHARED_SECRET ausente: todo request autenticado responde 401 (AI-4.6a)");
+    }
+    if (!isAuthorizedBearer(request.headers.get("Authorization"), env.GENERATION_SHARED_SECRET)) {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
 
@@ -458,10 +466,12 @@ export default {
       // "tratar cota estourada/provedor indisponivel como erro legivel,
       // nunca travamento silencioso" -- vale igual pra falha do proprio
       // container, achado depurando o primeiro deploy real).
-      return Response.json(
-        { error: `container error: ${(err as Error).message}`, stack: (err as Error).stack },
-        { status: 502 }
-      );
+      // AI-4.6c: o stack fica so' no log. Ele chegava cortado ao navegador
+      // via topic_regeneration_jobs.error. A mensagem continua no corpo: o
+      // chamador e' a Pages Function (autenticada pelo Bearer), que a grava
+      // no D1 sem repassar ao navegador.
+      console.error("container error", (err as Error).stack ?? (err as Error).message);
+      return Response.json({ error: `container error: ${(err as Error).message}` }, { status: 502 });
     }
   },
 };

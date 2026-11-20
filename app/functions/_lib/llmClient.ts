@@ -25,28 +25,50 @@ export interface ChatMessage {
 
 export const DEFAULT_CHAT_MODEL = "hf:deepseek-ai/DeepSeek-V3";
 
-export async function chat(env: Env, model: string, messages: ChatMessage[], temperature = 0.7): Promise<string> {
-  if (model.startsWith("hf:")) return chatHuggingFace(env, model.slice(3), messages, temperature);
-  if (model.startsWith("gemini") || model.startsWith("gemma")) return chatGemini(model, messages, temperature);
-  if (model.startsWith("claude")) return chatClaude(model, messages, temperature);
+export interface ChatOptions {
+  temperature: number;
+  // AI-4.2 (Tech DD, 18/11/2026): obrigatorios de proposito -- nenhuma
+  // chamada sai sem teto de saida nem de tempo. Valores em _lib/limits.ts
+  // (LLM_BUDGETS).
+  maxTokens: number;
+  timeoutMs: number;
+}
+
+export async function chat(env: Env, model: string, messages: ChatMessage[], opts: ChatOptions): Promise<string> {
+  if (model.startsWith("hf:")) return chatHuggingFace(env, model.slice(3), messages, opts);
+  if (model.startsWith("gemini") || model.startsWith("gemma")) return chatGemini(model, messages, opts);
+  if (model.startsWith("claude")) return chatClaude(model, messages, opts);
   throw new Error(
     `provedor de LLM nao implementado pro prefixo do model "${model}" -- adicione um branch novo em _lib/llmClient.ts (mesmo padrao do pipeline, generation/llm_client.py)`
   );
 }
 
-async function chatHuggingFace(env: Env, model: string, messages: ChatMessage[], temperature: number): Promise<string> {
+async function chatHuggingFace(env: Env, model: string, messages: ChatMessage[], opts: ChatOptions): Promise<string> {
   if (!env.HUGGINGFACE_API_KEY) {
     throw new Error("HUGGINGFACE_API_KEY nao configurado");
   }
-  const res = await fetch("https://router.huggingface.co/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.HUGGINGFACE_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, temperature, messages }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("https://router.huggingface.co/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.HUGGINGFACE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model, temperature: opts.temperature, max_tokens: opts.maxTokens, messages }),
+      signal: AbortSignal.timeout(opts.timeoutMs),
+    });
+  } catch (err) {
+    if ((err as Error).name === "TimeoutError") {
+      throw new Error(`Hugging Face nao respondeu em ${opts.timeoutMs} ms (model ${model})`);
+    }
+    throw err;
+  }
   if (!res.ok) {
     throw new Error(`Hugging Face respondeu ${res.status}: ${await res.text()}`);
   }
-  const data = (await res.json()) as { choices: { message: { content: string } }[] };
+  const data = (await res.json()) as { choices: { message: { content: string }; finish_reason?: string }[] };
+  // saida cortada pelo max_tokens -- sinal para recalibrar LLM_BUDGETS
+  if (data.choices[0]?.finish_reason === "length") {
+    console.warn(`LLM cortado no max_tokens=${opts.maxTokens} (model ${model})`);
+  }
   return data.choices[0]?.message?.content ?? "";
 }
 
@@ -56,11 +78,11 @@ async function chatHuggingFace(env: Env, model: string, messages: ChatMessage[],
 // API, extrair o texto da resposta. Nenhum outro arquivo deste projeto
 // precisa mudar -- so' quem chama chat() com um model desse prefixo passa
 // a funcionar.
-async function chatGemini(model: string, _messages: ChatMessage[], _temperature: number): Promise<string> {
+async function chatGemini(model: string, _messages: ChatMessage[], _opts: ChatOptions): Promise<string> {
   throw new Error(`provedor Gemini ainda nao implementado no Worker (model "${model}") -- ver llm_client.py::_chat_gemini`);
 }
 
-async function chatClaude(model: string, _messages: ChatMessage[], _temperature: number): Promise<string> {
+async function chatClaude(model: string, _messages: ChatMessage[], _opts: ChatOptions): Promise<string> {
   throw new Error(`provedor Claude ainda nao implementado no Worker (model "${model}") -- ver llm_client.py::_chat_claude`);
 }
 
